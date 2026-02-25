@@ -1,0 +1,121 @@
+import * as assert from "node:assert";
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import * as vscode from "vscode";
+import { suite, test } from "mocha";
+import { ProfileResolver } from "../../profile/resolver";
+import { saveDefaultProfile, saveProfiles, saveWorkspaceDefaultProfile } from "../../config";
+import { Profile } from "../../types";
+
+const EXTENSION_ID = "shay.mdx-asset-manager";
+
+const profiles: Profile[] = [
+  {
+    id: "aws-a",
+    name: "AWS A",
+    provider: "aws-s3",
+    bucket: "bucket-a",
+    region: "us-east-1",
+    publicBaseUrl: "https://cdn-a.example.com",
+    basePrefix: "assets"
+  },
+  {
+    id: "r2-b",
+    name: "R2 B",
+    provider: "cloudflare-r2",
+    bucket: "bucket-b",
+    accountId: "account-123",
+    publicBaseUrl: "https://cdn-b.example.com",
+    basePrefix: "assets"
+  }
+];
+
+suite("Extension Host Integration", () => {
+  test("activates extension and registers core commands", async () => {
+    const ext = vscode.extensions.getExtension(EXTENSION_ID);
+    assert.ok(ext, `Extension '${EXTENSION_ID}' must be available`);
+
+    await ext!.activate();
+
+    const commands = await vscode.commands.getCommands(true);
+    for (const command of [
+      "mdxAssetManager.addProfile",
+      "mdxAssetManager.editProfile",
+      "mdxAssetManager.removeProfile",
+      "mdxAssetManager.setWorkspaceDefaultProfile",
+      "mdxAssetManager.switchActiveProfile",
+      "mdxAssetManager.setProfileCredentials",
+      "mdxAssetManager.clearProfileCredentials",
+      "mdxAssetManager.uploadFromFilePicker",
+      "mdxAssetManager.refreshAssets",
+      "mdxAssetManager.copyAssetUrl",
+      "mdxAssetManager.copyAssetSnippet",
+      "mdxAssetManager.deleteAsset"
+    ]) {
+      assert.ok(commands.includes(command), `Missing command registration: ${command}`);
+    }
+  });
+
+  test("resolves workspace default before user default", async () => {
+    const file = await createWorkspaceFile("profile-resolution.md", "# test");
+    const document = await vscode.workspace.openTextDocument(file);
+
+    await saveProfiles(profiles);
+    await saveDefaultProfile("aws-a");
+    await saveWorkspaceDefaultProfile("r2-b", document.uri);
+
+    const resolver = new ProfileResolver();
+    const resolved = await resolver.resolveProfile({
+      resource: document.uri,
+      interactive: false,
+      askToSetWorkspaceDefault: false
+    });
+
+    assert.ok(resolved);
+    assert.equal(resolved?.profile.id, "r2-b");
+    assert.equal(resolved?.source, "workspaceDefault");
+
+    await clearProfileConfig(document.uri);
+  });
+
+  test("session profile override wins over defaults", async () => {
+    const file = await createWorkspaceFile("session-resolution.md", "# test");
+    const document = await vscode.workspace.openTextDocument(file);
+
+    await saveProfiles(profiles);
+    await saveDefaultProfile("aws-a");
+    await saveWorkspaceDefaultProfile("r2-b", document.uri);
+
+    const resolver = new ProfileResolver();
+    resolver.setSessionProfile("aws-a");
+
+    const resolved = await resolver.resolveProfile({
+      resource: document.uri,
+      interactive: false,
+      askToSetWorkspaceDefault: false
+    });
+
+    assert.ok(resolved);
+    assert.equal(resolved?.profile.id, "aws-a");
+    assert.equal(resolved?.source, "session");
+
+    await clearProfileConfig(document.uri);
+  });
+});
+
+async function createWorkspaceFile(fileName: string, content: string): Promise<vscode.Uri> {
+  const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (!root) {
+    throw new Error("No workspace folder available for integration tests");
+  }
+
+  const filePath = path.join(root, fileName);
+  await fs.writeFile(filePath, content, "utf8");
+  return vscode.Uri.file(filePath);
+}
+
+async function clearProfileConfig(resource: vscode.Uri): Promise<void> {
+  await saveProfiles([]);
+  await saveDefaultProfile(undefined);
+  await saveWorkspaceDefaultProfile(undefined, resource);
+}

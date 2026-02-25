@@ -1,0 +1,202 @@
+{
+  "name": "mdx-asset-manager",
+  "displayName": "MDX Asset Manager",
+  "description": "Drag-and-drop upload for Markdown/MDX/HTML with S3/R2/custom endpoint profiles and scoped asset management.",
+  "version": "0.1.0",
+  "publisher": "shay",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:markdown",
+    "onLanguage:mdx",
+    "onLanguage:html",
+    "onView:mdxAssetsView",
+    "onCommand:mdxAssetManager.addProfile",
+    "onCommand:mdxAssetManager.editProfile",
+    "onCommand:mdxAssetManager.removeProfile",
+    "onCommand:mdxAssetManager.setWorkspaceDefaultProfile",
+    "onCommand:mdxAssetManager.switchActiveProfile",
+    "onCommand:mdxAssetManager.setProfileCredentials",
+    "onCommand:mdxAssetManager.clearProfileCredentials",
+    "onCommand:mdxAssetManager.uploadFromFilePicker",
+    "onCommand:mdxAssetManager.refreshAssets",
+    "onCommand:mdxAssetManager.copyAssetUrl",
+    "onCommand:mdxAssetManager.copyAssetSnippet",
+    "onCommand:mdxAssetManager.deleteAsset"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "mdxAssetManager.addProfile", "title": "Mdx Assets: Add Endpoint Profile" },
+      { "command": "mdxAssetManager.editProfile", "title": "Mdx Assets: Edit Endpoint Profile" },
+      { "command": "mdxAssetManager.removeProfile", "title": "Mdx Assets: Remove Endpoint Profile" },
+      { "command": "mdxAssetManager.setWorkspaceDefaultProfile", "title": "Mdx Assets: Set Workspace Default Profile" },
+      { "command": "mdxAssetManager.switchActiveProfile", "title": "Mdx Assets: Switch Active Profile (Session)" },
+      { "command": "mdxAssetManager.setProfileCredentials", "title": "Mdx Assets: Set Profile Credentials" },
+      { "command": "mdxAssetManager.clearProfileCredentials", "title": "Mdx Assets: Clear Profile Credentials" },
+      { "command": "mdxAssetManager.uploadFromFilePicker", "title": "Mdx Assets: Upload From File Picker" },
+      { "command": "mdxAssetManager.refreshAssets", "title": "Mdx Assets: Refresh Assets" },
+      { "command": "mdxAssetManager.copyAssetUrl", "title": "Mdx Assets: Copy Asset URL" },
+      { "command": "mdxAssetManager.copyAssetSnippet", "title": "Mdx Assets: Copy Asset Snippet" },
+      { "command": "mdxAssetManager.deleteAsset", "title": "Mdx Assets: Delete Asset" }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "mdxAssets",
+          "title": "MDX Assets",
+          "icon": "media/assets.svg"
+        }
+      ]
+    },
+    "views": {
+      "mdxAssets": [
+        {
+          "id": "mdxAssetsView",
+          "name": "File Assets"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "mdxAssetManager.refreshAssets",
+          "when": "view == mdxAssetsView",
+          "group": "navigation"
+        },
+        {
+          "command": "mdxAssetManager.uploadFromFilePicker",
+          "when": "view == mdxAssetsView",
+          "group": "navigation"
+        },
+        {
+          "command": "mdxAssetManager.switchActiveProfile",
+          "when": "view == mdxAssetsView",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "mdxAssetManager.copyAssetUrl",
+          "when": "view == mdxAssetsView && viewItem == mdxAssetItem",
+          "group": "inline"
+        },
+        {
+          "command": "mdxAssetManager.copyAssetSnippet",
+          "when": "view == mdxAssetsView && viewItem == mdxAssetItem",
+          "group": "inline"
+        },
+        {
+          "command": "mdxAssetManager.deleteAsset",
+          "when": "view == mdxAssetsView && viewItem == mdxAssetItem",
+          "group": "inline"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "MDX Asset Manager",
+      "properties": {
+        "mdxAssetManager.profiles": {
+          "type": "array",
+          "description": "Configured upload endpoint profiles.",
+          "default": [],
+          "items": {
+            "type": "object",
+            "required": ["id", "name", "provider", "bucket", "publicBaseUrl"],
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "provider": {
+                "type": "string",
+                "enum": ["aws-s3", "cloudflare-r2", "custom-s3"]
+              },
+              "bucket": { "type": "string" },
+              "region": { "type": "string" },
+              "endpoint": { "type": "string" },
+              "accountId": { "type": "string" },
+              "publicBaseUrl": { "type": "string" },
+              "basePrefix": { "type": "string" },
+              "forcePathStyle": { "type": "boolean" }
+            }
+          }
+        },
+        "mdxAssetManager.defaultProfile": {
+          "type": "string",
+          "description": "Default profile id used when workspace default is not set."
+        },
+        "mdxAssetManager.workspaceDefaultProfile": {
+          "type": "string",
+          "description": "Workspace-specific default profile id."
+        },
+        "mdxAssetManager.allowedExtensions": {
+          "type": "array",
+          "description": "Allowed file extensions for drag/drop and upload.",
+          "default": [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".avif", ".mp4", ".webm", ".mov", ".pdf"],
+          "items": { "type": "string" }
+        },
+        "mdxAssetManager.maxUploadSizeMB": {
+          "type": "number",
+          "description": "Maximum upload file size in megabytes.",
+          "default": 100,
+          "minimum": 1
+        },
+        "mdxAssetManager.insertRules": {
+          "type": "array",
+          "description": "Custom insertion rules. Variables: ${url}, ${filename}, ${basename}, ${ext}, ${mime}, ${key}, ${alt}.",
+          "default": [],
+          "items": {
+            "type": "object",
+            "required": ["when", "template"],
+            "properties": {
+              "when": {
+                "type": "object",
+                "required": ["languageIds"],
+                "properties": {
+                  "languageIds": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "extensions": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  },
+                  "mimePrefixes": {
+                    "type": "array",
+                    "items": { "type": "string" }
+                  }
+                }
+              },
+              "template": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "check": "tsc --noEmit -p ./",
+    "test": "vitest run",
+    "test:integration": "npm run build && node ./out/test/runTest.js",
+    "test:all": "npm run test && npm run test:integration"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.872.0",
+    "mime-types": "^2.1.35"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/mime-types": "^2.1.4",
+    "@types/node": "^22.13.10",
+    "@types/vscode": "^1.90.0",
+    "@vscode/test-electron": "^2.5.2",
+    "mocha": "^10.8.2",
+    "typescript": "^5.8.2",
+    "vitest": "^2.1.8"
+  }
+}

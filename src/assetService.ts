@@ -1,0 +1,210 @@
+import * as fs from "node:fs/promises";
+import * as path from "node:path";
+import * as vscode from "vscode";
+import { lookup as mimeLookup } from "mime-types";
+import { getSettings } from "./config";
+import { buildInsertSnippet, createInsertContext } from "./insert/patternEngine";
+import { ProfileResolver } from "./profile/resolver";
+import { SecretStore } from "./secrets";
+import { ActiveDocScope, AssetRecord, Profile, UploadResult } from "./types";
+import { isSupportedDocument, relativePathOrBasename, stripExtension } from "./utils";
+import { buildObjectKey, buildScopePrefix, shortUniqueSuffix } from "./upload/keyBuilder";
+import { S3Uploader } from "./upload/s3Uploader";
+
+export class AssetService {
+  constructor(private readonly profileResolver: ProfileResolver, private readonly secretStore: SecretStore) {}
+
+  getActiveScope(editor = vscode.window.activeTextEditor): ActiveDocScope | undefined {
+    if (!editor) {
+      return undefined;
+    }
+
+    const document = editor.document;
+    if (!isSupportedDocument(document)) {
+      return undefined;
+    }
+
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+    const relativePath = relativePathOrBasename(document, workspaceFolder);
+    const fileBaseName = stripExtension(path.basename(relativePath));
+    const relativeDir = path.posix.dirname(relativePath);
+
+    return {
+      document,
+      workspaceFolder,
+      relativePath,
+      relativeDir,
+      fileBaseName,
+      keyPrefix: ""
+    };
+  }
+
+  async uploadFiles(options: {
+    filePaths: string[];
+    targetDocument: vscode.TextDocument;
+    allowProfilePrompt?: boolean;
+  }): Promise<UploadResult[]> {
+    const { filePaths, targetDocument } = options;
+    const settings = getSettings(targetDocument.uri);
+
+    const resolved = await this.profileResolver.resolveProfile({
+      resource: targetDocument.uri,
+      interactive: options.allowProfilePrompt ?? true,
+      askToSetWorkspaceDefault: true
+    });
+
+    if (!resolved) {
+      return [];
+    }
+
+    const validationErrors = this.validateProfileUsability(resolved.profile);
+    if (validationErrors.length) {
+      void vscode.window.showErrorMessage(validationErrors.join(" "));
+      return [];
+    }
+
+    const credentials = await this.secretStore.getProfileCredentials(resolved.profile.id);
+    if (!credentials) {
+      const setNow = await vscode.window.showWarningMessage(
+        `Missing credentials for profile '${resolved.profile.name}'.`,
+        "Set Credentials",
+        "Cancel"
+      );
+      if (setNow === "Set Credentials") {
+        await vscode.commands.executeCommand("mdxAssetManager.setProfileCredentials", resolved.profile.id);
+      }
+      return [];
+    }
+
+    const uploader = new S3Uploader(resolved.profile, credentials);
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(targetDocument.uri);
+    const scope = this.scopeFromDocument(targetDocument, resolved.profile, workspaceFolder);
+
+    const uploads: UploadResult[] = [];
+    for (const filePath of filePaths) {
+      const stat = await fs.stat(filePath);
+      const ext = path.extname(filePath).toLowerCase();
+      const maxBytes = settings.maxUploadSizeMB * 1024 * 1024;
+
+      if (stat.size > maxBytes) {
+        void vscode.window.showWarningMessage(`Skipped ${path.basename(filePath)}: exceeds ${settings.maxUploadSizeMB}MB.`);
+        continue;
+      }
+
+      if (settings.allowedExtensions.length && !settings.allowedExtensions.includes(ext)) {
+        void vscode.window.showWarningMessage(`Skipped ${path.basename(filePath)}: extension ${ext} is not allowed.`);
+        continue;
+      }
+
+      const key = await this.ensureUniqueKey(uploader, scope.keyPrefix, filePath);
+      const url = await uploader.uploadFile(filePath, key);
+      const context = createInsertContext({
+        languageId: targetDocument.languageId,
+        filename: path.basename(filePath),
+        extension: ext,
+        url,
+        key,
+        mime: (mimeLookup(filePath) || "application/octet-stream").toString()
+      });
+
+      uploads.push({
+        key,
+        url,
+        snippet: buildInsertSnippet(context, settings.insertRules)
+      });
+    }
+
+    return uploads;
+  }
+
+  async listAssetsForActiveDocument(editor = vscode.window.activeTextEditor): Promise<AssetRecord[]> {
+    const scope = this.getActiveScope(editor);
+    if (!scope) {
+      return [];
+    }
+
+    const resolved = await this.profileResolver.resolveProfile({
+      resource: scope.document.uri,
+      interactive: false,
+      askToSetWorkspaceDefault: false
+    });
+    if (!resolved) {
+      return [];
+    }
+
+    const credentials = await this.secretStore.getProfileCredentials(resolved.profile.id);
+    if (!credentials) {
+      return [];
+    }
+
+    const uploader = new S3Uploader(resolved.profile, credentials);
+    const prefix = buildScopePrefix(scope, resolved.profile);
+    const listed = await uploader.listByPrefix(`${prefix}/`);
+    return listed.map((item) => uploader.toAssetRecord(item));
+  }
+
+  async deleteAsset(asset: AssetRecord): Promise<void> {
+    const settings = getSettings();
+    const profile = settings.profiles.find((item) => item.id === asset.profileId);
+    if (!profile) {
+      throw new Error(`Profile '${asset.profileId}' was not found.`);
+    }
+
+    const credentials = await this.secretStore.getProfileCredentials(profile.id);
+    if (!credentials) {
+      throw new Error(`Missing credentials for profile '${profile.name}'.`);
+    }
+
+    const uploader = new S3Uploader(profile, credentials);
+    await uploader.deleteObject(asset.key);
+  }
+
+  private scopeFromDocument(document: vscode.TextDocument, profile: Profile, workspaceFolder?: vscode.WorkspaceFolder): ActiveDocScope {
+    const relativePath = relativePathOrBasename(document, workspaceFolder);
+    const fileBaseName = stripExtension(path.basename(relativePath));
+    const relativeDir = path.posix.dirname(relativePath);
+    const keyPrefix = buildScopePrefix({ relativeDir, fileBaseName }, profile);
+
+    return {
+      document,
+      workspaceFolder,
+      relativePath,
+      relativeDir,
+      fileBaseName,
+      keyPrefix
+    };
+  }
+
+  private async ensureUniqueKey(uploader: S3Uploader, prefix: string, filePath: string): Promise<string> {
+    let attempt = 0;
+    while (attempt < 10) {
+      const key = buildObjectKey(prefix, filePath, attempt ? shortUniqueSuffix() : undefined);
+      const exists = await uploader.keyExists(key);
+      if (!exists) {
+        return key;
+      }
+      attempt += 1;
+    }
+
+    return buildObjectKey(prefix, filePath, `${Date.now()}-${shortUniqueSuffix()}`);
+  }
+
+  private validateProfileUsability(profile: Profile): string[] {
+    const errors: string[] = [];
+
+    if (!profile.bucket?.trim()) {
+      errors.push(`Profile '${profile.name}' is missing bucket.`);
+    }
+    if (!profile.publicBaseUrl?.trim()) {
+      errors.push(`Profile '${profile.name}' is missing publicBaseUrl.`);
+    }
+    if (profile.provider === "custom-s3" && !profile.endpoint?.trim()) {
+      errors.push(`Profile '${profile.name}' requires endpoint for custom-s3.`);
+    }
+    if (profile.provider === "cloudflare-r2" && !profile.endpoint?.trim() && !profile.accountId?.trim()) {
+      errors.push(`Profile '${profile.name}' requires endpoint or accountId for cloudflare-r2.`);
+    }
+
+    return errors;
+  }
+}
