@@ -110,7 +110,9 @@ function normalizeProfiles(raw: unknown): Profile[] {
       ...profile,
       id,
       name: trimmedString(profile.name) || id,
-      provider: profile.provider,
+      // Settings may carry a typo'd provider; validateProfile rejects unknown
+      // values, so the raw value travels through unfiltered.
+      provider: profile.provider as ProviderType,
       bucket: trimmedString(profile.bucket),
       region: trimmedString(profile.region) || undefined,
       endpoint: trimmedString(profile.endpoint) || undefined,
