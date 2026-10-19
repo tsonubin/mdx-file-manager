@@ -2,7 +2,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { lookup as mimeLookup } from "mime-types";
-import { getSettings } from "./config";
+import { getSettings, validateProfile } from "./config";
 import { buildInsertSnippet, createInsertContext } from "./insert/patternEngine";
 import { ProfileResolver } from "./profile/resolver";
 import { SecretStore } from "./secrets";
@@ -58,7 +58,7 @@ export class AssetService {
       return { uploaded: [], failures: [] };
     }
 
-    const validationErrors = this.validateProfileUsability(resolved.profile);
+    const validationErrors = validateProfile(resolved.profile);
     if (validationErrors.length) {
       void vscode.window.showErrorMessage(validationErrors.join(" "));
       return { uploaded: [], failures: [] };
@@ -211,25 +211,6 @@ export class AssetService {
     // Uniqueness unverifiable or exhausted: fail safe with a unique suffix
     // instead of risking overwriting an existing object.
     return buildObjectKey(prefix, filePath, `${Date.now()}-${shortUniqueSuffix()}`);
-  }
-
-  private validateProfileUsability(profile: Profile): string[] {
-    const errors: string[] = [];
-
-    if (!profile.bucket?.trim()) {
-      errors.push(`Profile '${profile.name}' is missing bucket.`);
-    }
-    if (!profile.publicBaseUrl?.trim()) {
-      errors.push(`Profile '${profile.name}' is missing publicBaseUrl.`);
-    }
-    if (profile.provider === "custom-s3" && !profile.endpoint?.trim()) {
-      errors.push(`Profile '${profile.name}' requires endpoint for custom-s3.`);
-    }
-    if (profile.provider === "cloudflare-r2" && !profile.endpoint?.trim() && !profile.accountId?.trim()) {
-      errors.push(`Profile '${profile.name}' requires endpoint or accountId for cloudflare-r2.`);
-    }
-
-    return errors;
   }
 }
 

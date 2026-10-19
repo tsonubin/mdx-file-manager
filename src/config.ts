@@ -1,8 +1,14 @@
 import * as vscode from "vscode";
-import { ExtensionSettings, InsertRule, Profile } from "./types";
+import { ExtensionSettings, InsertRule, Profile, ProviderType } from "./types";
 import { ensureLeadingDot } from "./utils";
 
 const CONFIG_NS = "mdxAssetManager";
+
+const KNOWN_PROVIDERS: Record<ProviderType, true> = {
+  "aws-s3": true,
+  "cloudflare-r2": true,
+  "custom-s3": true
+};
 
 const DEFAULT_ALLOWED_EXTENSIONS = [
   ".png",
@@ -53,6 +59,9 @@ export function validateProfile(profile: Profile): string[] {
   }
   if (!profile.name?.trim()) {
     errors.push("Profile name is required.");
+  }
+  if (!KNOWN_PROVIDERS[profile.provider]) {
+    errors.push("Profile provider must be one of aws-s3, cloudflare-r2, custom-s3.");
   }
   if (!profile.bucket?.trim()) {
     errors.push("Bucket is required.");
