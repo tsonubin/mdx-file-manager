@@ -7,7 +7,7 @@ import { buildInsertSnippet, createInsertContext } from "./insert/patternEngine"
 import { ProfileResolver } from "./profile/resolver";
 import { SecretStore } from "./secrets";
 import { ActiveDocScope, AssetRecord, Profile, UploadBatchResult, UploadFailure, UploadResult } from "./types";
-import { isSupportedDocument, relativePathOrBasename, stripExtension } from "./utils";
+import { describeError, isSupportedDocument, relativePathOrBasename, stripExtension } from "./utils";
 import { buildObjectKey, buildScopePrefix, shortUniqueSuffix } from "./upload/keyBuilder";
 import { S3Uploader } from "./upload/s3Uploader";
 
@@ -67,7 +67,7 @@ export class AssetService {
     const credentials = await this.secretStore.getProfileCredentials(resolved.profile.id);
     if (!credentials) {
       const setNow = await vscode.window.showWarningMessage(
-        `Missing credentials for profile '${resolved.profile.name}'.`,
+        `Missing credentials for profile '${resolved.profile.name}'. Save credentials, then upload again.`,
         "Set Credentials",
         "Cancel"
       );
@@ -129,7 +129,7 @@ export class AssetService {
           renames.push(`${file} → ${key.split("/").pop() ?? key}`);
         }
       } catch (error) {
-        failures.push({ file, reason: error instanceof Error ? error.message : String(error) });
+        failures.push({ file, reason: describeError(error) });
       }
     }
 

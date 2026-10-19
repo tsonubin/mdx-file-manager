@@ -4,6 +4,7 @@ import { AssetTreeDataProvider, AssetTreeItem } from "./assets/treeDataProvider"
 import { getSettings } from "./config";
 import { buildInsertSnippet, createInsertContext } from "./insert/patternEngine";
 import { AssetRecord } from "./types";
+import { describeError } from "./utils";
 
 export function registerAssetCommands(context: vscode.ExtensionContext, deps: {
   assetService: AssetService;
@@ -57,7 +58,7 @@ export function registerAssetCommands(context: vscode.ExtensionContext, deps: {
         await treeProvider.refresh(activeEditor);
         onTreeRefreshed?.();
       } catch (error) {
-        void vscode.window.showErrorMessage(`Uploaded, but inserting snippets failed: ${toMessage(error)}`);
+        void vscode.window.showErrorMessage(`Uploaded, but inserting snippets failed: ${describeError(error)}`);
       }
     }),
 
@@ -121,7 +122,7 @@ export function registerAssetCommands(context: vscode.ExtensionContext, deps: {
         onTreeRefreshed?.();
         void vscode.window.showInformationMessage("Asset deleted.");
       } catch (error) {
-        void vscode.window.showErrorMessage(`Delete failed: ${toMessage(error)}`);
+        void vscode.window.showErrorMessage(`Delete failed: ${describeError(error)}`);
       }
     })
   );
@@ -134,11 +135,4 @@ function toAssetRecord(item?: AssetTreeItem | AssetRecord): AssetRecord | undefi
     return undefined;
   }
   return item instanceof AssetTreeItem ? item.asset : item;
-}
-
-function toMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return String(error);
 }

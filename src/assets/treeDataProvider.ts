@@ -2,7 +2,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { AssetService } from "../assetService";
 import { AssetRecord } from "../types";
-import { formatBytes, isSupportedDocument } from "../utils";
+import { describeError, formatBytes, isSupportedDocument } from "../utils";
 
 export class AssetTreeItem extends vscode.TreeItem {
   constructor(public readonly asset: AssetRecord) {
@@ -57,7 +57,7 @@ export class AssetTreeDataProvider implements vscode.TreeDataProvider<AssetTreeI
       }
       // Keep the last known items; a transient listing failure should only
       // change the status line, not blank the view.
-      this.statusMessage = `Failed to load assets: ${toMessage(error)}`;
+      this.statusMessage = `Failed to load assets: ${describeError(error)}`;
     }
 
     this.onDidChangeTreeDataEmitter.fire();
@@ -70,11 +70,4 @@ export class AssetTreeDataProvider implements vscode.TreeDataProvider<AssetTreeI
   getChildren(): vscode.ProviderResult<AssetTreeItem[]> {
     return this.assets.map((asset) => new AssetTreeItem(asset));
   }
-}
-
-function toMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return String(error);
 }
