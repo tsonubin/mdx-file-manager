@@ -92,6 +92,9 @@ oddly named files cannot break out of the emitted markup. Things to know:
   snippets are still inserted.
 - **Sidebar shows "Open an MDX/Markdown/HTML file"**: listing is scoped to
   the active document.
+- **Sidebar is empty**: the status line names the cause — no profiles
+  configured, no profile selected, or missing credentials — and the command
+  that fixes it.
 
 ## Settings
 

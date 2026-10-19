@@ -10,7 +10,7 @@ import { AssetTreeDataProvider } from "../../assets/treeDataProvider";
 import { ProfileResolver } from "../../profile/resolver";
 import { saveDefaultProfile, saveProfiles, saveWorkspaceDefaultProfile } from "../../config";
 import { SecretStore } from "../../secrets";
-import { AssetRecord, Profile } from "../../types";
+import { AssetListing, AssetRecord, Profile } from "../../types";
 
 const EXTENSION_ID = "shay.mdx-asset-manager";
 
@@ -166,9 +166,9 @@ suite("Extension Host Integration", () => {
   });
 
   test("discards stale asset listings", async () => {
-    const pendingListings: Array<(assets: AssetRecord[]) => void> = [];
+    const pendingListings: Array<(listing: AssetListing) => void> = [];
     const assetService = {
-      listAssetsForActiveDocument: () => new Promise<AssetRecord[]>((resolve) => pendingListings.push(resolve))
+      listAssetsForActiveDocument: () => new Promise<AssetListing>((resolve) => pendingListings.push(resolve))
       // Stub implements only the listing method the provider calls.
     } as unknown as AssetService;
     const provider = new AssetTreeDataProvider(assetService);
@@ -180,12 +180,20 @@ suite("Extension Host Integration", () => {
     const first = provider.refresh(firstEditor);
     const second = provider.refresh(secondEditor);
 
-    pendingListings[1]([{ profileId: "p", profileName: "Stub", key: "fresh.png", url: "https://cdn.example.com/fresh.png" }]);
+    pendingListings[1]({
+      kind: "listed",
+      profileName: "Stub",
+      assets: [{ profileId: "p", profileName: "Stub", key: "fresh.png", url: "https://cdn.example.com/fresh.png" }]
+    });
     await second;
-    pendingListings[0]([
-      { profileId: "p", profileName: "Stub", key: "stale-a.png", url: "https://cdn.example.com/stale-a.png" },
-      { profileId: "p", profileName: "Stub", key: "stale-b.png", url: "https://cdn.example.com/stale-b.png" }
-    ]);
+    pendingListings[0]({
+      kind: "listed",
+      profileName: "Stub",
+      assets: [
+        { profileId: "p", profileName: "Stub", key: "stale-a.png", url: "https://cdn.example.com/stale-a.png" },
+        { profileId: "p", profileName: "Stub", key: "stale-b.png", url: "https://cdn.example.com/stale-b.png" }
+      ]
+    });
     await first;
 
     assert.equal(provider.getStatusMessage(), "Stub • 1 asset");

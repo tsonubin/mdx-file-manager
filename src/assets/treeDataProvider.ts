@@ -43,14 +43,28 @@ export class AssetTreeDataProvider implements vscode.TreeDataProvider<AssetTreeI
     }
 
     try {
-      const assets = await this.assetService.listAssetsForActiveDocument(editor);
+      const listing = await this.assetService.listAssetsForActiveDocument(editor);
       if (generation !== this.refreshGeneration) {
         return;
       }
-      this.assets = assets;
-      const profileName = assets[0]?.profileName;
-      const countText = assets.length === 1 ? "1 asset" : `${assets.length} assets`;
-      this.statusMessage = profileName ? `${profileName} • ${countText}` : countText;
+
+      if (!listing) {
+        this.assets = [];
+        this.statusMessage = "Open an MDX/Markdown/HTML file to view scoped assets.";
+      } else if (listing.kind === "listed") {
+        this.assets = listing.assets;
+        const countText = listing.assets.length === 1 ? "1 asset" : `${listing.assets.length} assets`;
+        this.statusMessage = `${listing.profileName} • ${countText}`;
+      } else {
+        this.assets = [];
+        if (listing.kind === "no-profiles") {
+          this.statusMessage = "No endpoint profiles configured. Run 'Mdx Assets: Add Endpoint Profile'.";
+        } else if (listing.kind === "no-default-profile") {
+          this.statusMessage = "No upload profile selected. Set a default or run 'Mdx Assets: Switch Active Profile'.";
+        } else {
+          this.statusMessage = `No credentials for '${listing.profileName}'. Run 'Mdx Assets: Set Profile Credentials'.`;
+        }
+      }
     } catch (error) {
       if (generation !== this.refreshGeneration) {
         return;

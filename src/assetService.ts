@@ -6,7 +6,7 @@ import { getSettings, validateProfile } from "./config";
 import { buildInsertSnippet, createInsertContext } from "./insert/patternEngine";
 import { ProfileResolver } from "./profile/resolver";
 import { SecretStore } from "./secrets";
-import { ActiveDocScope, AssetRecord, Profile, UploadBatchResult, UploadFailure, UploadResult } from "./types";
+import { ActiveDocScope, AssetListing, AssetRecord, Profile, UploadBatchResult, UploadFailure, UploadResult } from "./types";
 import { describeError, isSupportedDocument, relativePathOrBasename, stripExtension } from "./utils";
 import { buildObjectKey, buildScopePrefix, shortUniqueSuffix } from "./upload/keyBuilder";
 import { S3Uploader } from "./upload/s3Uploader";
@@ -157,30 +157,35 @@ export class AssetService {
     return { uploaded, failures };
   }
 
-  async listAssetsForActiveDocument(editor = vscode.window.activeTextEditor): Promise<AssetRecord[]> {
+  async listAssetsForActiveDocument(editor = vscode.window.activeTextEditor): Promise<AssetListing | undefined> {
     const scope = this.getActiveScope(editor);
     if (!scope) {
-      return [];
+      return undefined;
     }
 
+    const settings = getSettings(scope.document.uri);
     const resolved = await this.profileResolver.resolveProfile({
       resource: scope.document.uri,
       interactive: false,
       askToSetWorkspaceDefault: false
     });
     if (!resolved) {
-      return [];
+      return settings.profiles.length ? { kind: "no-default-profile" } : { kind: "no-profiles" };
     }
 
     const credentials = await this.secretStore.getProfileCredentials(resolved.profile.id);
     if (!credentials) {
-      return [];
+      return { kind: "no-credentials", profileName: resolved.profile.name };
     }
 
     const uploader = new S3Uploader(resolved.profile, credentials);
     const prefix = buildScopePrefix(scope, resolved.profile);
     const listed = await uploader.listByPrefix(`${prefix}/`);
-    return listed.map((item) => uploader.toAssetRecord(item));
+    return {
+      kind: "listed",
+      profileName: resolved.profile.name,
+      assets: listed.map((item) => uploader.toAssetRecord(item))
+    };
   }
 
   async deleteAsset(asset: AssetRecord): Promise<void> {

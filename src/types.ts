@@ -71,6 +71,14 @@ export interface AssetRecord {
   lastModified?: Date;
 }
 
+// Why the asset view is empty — or the assets themselves. Bare "0 assets"
+// hid the real cause (no profile, no default, no credentials).
+export type AssetListing =
+  | { kind: "listed"; profileName: string; assets: AssetRecord[] }
+  | { kind: "no-profiles" }
+  | { kind: "no-default-profile" }
+  | { kind: "no-credentials"; profileName: string };
+
 export interface UploadResult {
   key: string;
   url: string;
