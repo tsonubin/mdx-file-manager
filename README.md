@@ -89,6 +89,8 @@ npm run test
 npm run test:integration
 ```
 
-Press `F5` in VS Code to launch the Extension Development Host.
+Press `F5` in VS Code to launch the Extension Development Host. The
+`.vscode/launch.json`/`tasks.json` in this repo wire the `npm: watch` compile
+task automatically, so no extra setup is needed.
 
-`test:integration` runs extension-host tests using `@vscode/test-electron` and downloads a VS Code test binary on first run.
+`test:integration` runs extension-host tests using `@vscode/test-electron` and downloads a VS Code test binary on first run. On headless Linux it needs a display (e.g. `xvfb-run -a npm run test:integration`).
