@@ -422,7 +422,7 @@ async function promptProfileFields(base: Partial<Profile> & Pick<Profile, "id" |
 async function validateProfileConnection(profile: Profile, credentials: ProfileCredentials): Promise<boolean> {
   try {
     const uploader = new S3Uploader(profile, credentials);
-    await uploader.validateConnection();
+    await uploader.validateConnection({ readOnly: getSettings().connectionCheck === "read-only" });
     void vscode.window.showInformationMessage("Connection validation succeeded.");
     return true;
   } catch (error) {

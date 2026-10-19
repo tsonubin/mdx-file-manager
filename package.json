@@ -144,6 +144,12 @@
           "default": 100,
           "minimum": 1
         },
+        "mdxAssetManager.connectionCheck": {
+          "type": "string",
+          "enum": ["write-probe", "read-only"],
+          "default": "write-probe",
+          "description": "How profile credential validation checks the bucket. 'write-probe' lists, writes and deletes a tiny probe object (verifies upload permission). 'read-only' only lists the bucket and never touches objects."
+        },
         "mdxAssetManager.insertRules": {
           "type": "array",
           "description": "Custom insertion rules. Variables: ${url}, ${filename}, ${basename}, ${ext}, ${mime}, ${key}, ${alt}.",

@@ -116,10 +116,7 @@ export class S3Uploader {
     );
   }
 
-  async validateConnection(): Promise<void> {
-    const probePrefix = "__mdx_asset_manager_probe__/";
-    const probeKey = `${probePrefix}${Date.now()}.txt`;
-
+  async validateConnection(options?: { readOnly?: boolean }): Promise<void> {
     await this.client.send(
       new ListObjectsV2Command({
         Bucket: this.profile.bucket,
@@ -127,6 +124,11 @@ export class S3Uploader {
       })
     );
 
+    if (options?.readOnly) {
+      return;
+    }
+
+    const probeKey = `__mdx_asset_manager_probe__/${Date.now()}.txt`;
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.profile.bucket,

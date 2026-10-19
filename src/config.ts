@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { ExtensionSettings, InsertRule, Profile, ProviderType } from "./types";
+import { ConnectionCheckMode, ExtensionSettings, InsertRule, Profile, ProviderType } from "./types";
 import { ensureLeadingDot } from "./utils";
 
 const CONFIG_NS = "mdxAssetManager";
@@ -36,7 +36,9 @@ export function getSettings(resource?: vscode.Uri): ExtensionSettings {
     workspaceDefaultProfile: config.get<string>("workspaceDefaultProfile"),
     allowedExtensions: normalizeExtensions(config.get<string[]>("allowedExtensions", DEFAULT_ALLOWED_EXTENSIONS)),
     maxUploadSizeMB: Math.max(1, config.get<number>("maxUploadSizeMB", 100)),
-    insertRules: normalizeInsertRules(config.get<InsertRule[]>("insertRules", []))
+    insertRules: normalizeInsertRules(config.get<InsertRule[]>("insertRules", [])),
+    // Unknown values coerce to the current default behavior.
+    connectionCheck: config.get<ConnectionCheckMode>("connectionCheck", "write-probe") === "read-only" ? "read-only" : "write-probe"
   };
 }
 

@@ -2,6 +2,8 @@ import type * as vscode from "vscode";
 
 export type ProviderType = "aws-s3" | "cloudflare-r2" | "custom-s3";
 
+export type ConnectionCheckMode = "write-probe" | "read-only";
+
 export interface Profile {
   id: string;
   name: string;
@@ -31,6 +33,7 @@ export interface ExtensionSettings {
   allowedExtensions: string[];
   maxUploadSizeMB: number;
   insertRules: InsertRule[];
+  connectionCheck: ConnectionCheckMode;
 }
 
 export interface ProfileCredentials {
