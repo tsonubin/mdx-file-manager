@@ -191,7 +191,7 @@
   "scripts": {
     "build": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "check": "tsc --noEmit -p ./",
+    "check": "tsc --noEmit -p ./ && tsc --noEmit -p ./tsconfig.test.json",
     "test": "vitest run",
     "test:integration": "npm run build && node ./out/test/runTest.js",
     "test:all": "npm run test && npm run test:integration"

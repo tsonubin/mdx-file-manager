@@ -162,9 +162,13 @@ Example rule:
 ```bash
 npm install
 npm run build
+npm run check
 npm run test
 npm run test:integration
 ```
+
+`npm run check` typechecks both `src/` and `test/` (vitest itself strips types
+without checking them).
 
 Press `F5` in VS Code to launch the Extension Development Host. The
 `.vscode/launch.json`/`tasks.json` in this repo wire the `npm: watch` compile
