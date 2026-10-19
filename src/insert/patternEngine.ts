@@ -59,8 +59,18 @@ export function createInsertContext(input: {
   };
 }
 
+export const TEMPLATE_TOKENS = ["url", "filename", "basename", "ext", "mime", "key", "alt"] as const;
+
+// A token name is only meaningful next to the InsertContext field it reads.
+export function isTemplateToken(token: string): token is keyof InsertContext {
+  return (TEMPLATE_TOKENS as readonly string[]).includes(token);
+}
+
 export function renderTemplate(template: string, context: InsertContext): string {
-  return template.replace(/\$\{(url|filename|basename|ext|mime|key|alt)\}/g, (_value, token: keyof InsertContext) => {
+  return template.replace(/\$\{([a-zA-Z]+)\}/g, (match, token: string) => {
+    if (!isTemplateToken(token)) {
+      return match;
+    }
     const value = context[token];
     if (context.languageId === "html") {
       return escapeHtml(value);

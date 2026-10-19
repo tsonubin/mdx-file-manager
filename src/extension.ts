@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { AssetService } from "./assetService";
 import { AssetTreeDataProvider } from "./assets/treeDataProvider";
 import { registerAssetCommands } from "./commands";
+import { warnAboutSettingsProblems } from "./config";
 import { MdxDocumentDropProvider } from "./drop/documentDropProvider";
 import { registerProfileCommands } from "./profile/commands";
 import { ProfileResolver } from "./profile/resolver";
@@ -54,12 +55,14 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.onDidChangeActiveTextEditor(scheduleTreeRefresh),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("mdxAssetManager")) {
+        warnAboutSettingsProblems();
         scheduleTreeRefresh();
       }
     }),
     new vscode.Disposable(() => clearTimeout(refreshTimer))
   );
 
+  warnAboutSettingsProblems();
   void treeProvider.refresh().then(refreshViewMessage);
 }
 

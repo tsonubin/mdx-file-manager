@@ -95,6 +95,9 @@ oddly named files cannot break out of the emitted markup. Things to know:
 - **Sidebar is empty**: the status line names the cause — no profiles
   configured, no profile selected, or missing credentials — and the command
   that fixes it.
+- **A "MDX Asset Manager settings problems" warning appears**: profile
+  fields, insert-rule template tokens, and default profile ids are checked
+  when settings change; the warning lists what to fix.
 
 ## Settings
 

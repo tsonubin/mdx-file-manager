@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { getSettings, validateProfile } from "../src/config";
-import { Profile, ProviderType } from "../src/types";
+import { diagnoseSettings, getSettings, validateProfile } from "../src/config";
+import { ExtensionSettings, Profile, ProviderType } from "../src/types";
 
 const raw = vi.hoisted(() => ({ values: {} as Record<string, unknown> }));
 
@@ -52,5 +52,35 @@ describe("getSettings", () => {
 
     raw.values = { maxUploadSizeMB: "25" };
     expect(getSettings().maxUploadSizeMB).toBe(25);
+  });
+});
+
+describe("diagnoseSettings", () => {
+  it("names the owning profile or rule for each problem", () => {
+    const settings = {
+      profiles: [
+        {
+          id: "x",
+          name: "X",
+          provider: "aws-s4" as unknown as ProviderType,
+          bucket: "",
+          publicBaseUrl: "https://cdn.example.com"
+        }
+      ],
+      defaultProfile: "gone",
+      allowedExtensions: [".png"],
+      maxUploadSizeMB: 100,
+      insertRules: [{ when: { languageIds: ["mdx"] }, template: '<V src="${src}" />' }],
+      connectionCheck: "write-probe",
+      promptForWorkspaceDefault: true
+    } satisfies ExtensionSettings;
+
+    expect(diagnoseSettings(settings)).toEqual([
+      "profile 'X': Profile provider must be one of aws-s3, cloudflare-r2, custom-s3.",
+      "profile 'X': Bucket is required.",
+      "defaultProfile 'gone' does not match any configured profile.",
+      "insert rule 1: unknown template token '${src}'."
+    ]);
+    expect(diagnoseSettings({ ...settings, profiles: [], defaultProfile: undefined, insertRules: [] })).toEqual([]);
   });
 });

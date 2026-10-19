@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { isTemplateToken } from "./insert/patternEngine";
 import { ConnectionCheckMode, ExtensionSettings, InsertRule, Profile, ProviderType } from "./types";
 import { ensureLeadingDot } from "./utils";
 
@@ -88,6 +89,56 @@ export function validateProfile(profile: Profile): string[] {
     errors.push("publicBaseUrl must start with http:// or https://");
   }
   return errors;
+}
+
+// Catches misconfiguration at edit time instead of at upload time: invalid
+// profile fields, template tokens that would be inserted literally, and
+// default ids that silently fall back to prompting.
+export function diagnoseSettings(settings: ExtensionSettings): string[] {
+  const problems: string[] = [];
+
+  for (const profile of settings.profiles) {
+    problems.push(...validateProfile(profile).map((error) => `profile '${profile.name}': ${error}`));
+  }
+
+  const profileIds = new Set(settings.profiles.map((profile) => profile.id));
+  if (settings.defaultProfile && !profileIds.has(settings.defaultProfile)) {
+    problems.push(`defaultProfile '${settings.defaultProfile}' does not match any configured profile.`);
+  }
+  if (settings.workspaceDefaultProfile && !profileIds.has(settings.workspaceDefaultProfile)) {
+    problems.push(`workspaceDefaultProfile '${settings.workspaceDefaultProfile}' does not match any configured profile.`);
+  }
+
+  settings.insertRules.forEach((rule, index) => {
+    for (const match of rule.template.matchAll(/\$\{([a-zA-Z]+)\}/g)) {
+      if (!isTemplateToken(match[1])) {
+        problems.push(`insert rule ${index + 1}: unknown template token '\${${match[1]}}'.`);
+      }
+    }
+  });
+
+  return problems;
+}
+
+let lastSettingsProblems: string | undefined;
+
+// Warns once per distinct problem set; re-warns only when the problems change.
+export function warnAboutSettingsProblems(): void {
+  const problems = diagnoseSettings(getSettings());
+  if (!problems.length) {
+    lastSettingsProblems = undefined;
+    return;
+  }
+
+  const shown = problems.slice(0, 3);
+  const remaining = problems.length - shown.length;
+  const details = remaining > 0 ? `${shown.join("; ")}; +${remaining} more` : shown.join("; ");
+  const message = `MDX Asset Manager settings problems: ${details}`;
+  if (message === lastSettingsProblems) {
+    return;
+  }
+  lastSettingsProblems = message;
+  void vscode.window.showWarningMessage(message);
 }
 
 function normalizeProfiles(raw: unknown): Profile[] {
