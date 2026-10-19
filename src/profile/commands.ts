@@ -203,6 +203,9 @@ async function removeProfile(secretStore: SecretStore): Promise<void> {
   if (settings.defaultProfile === profile.id) {
     await saveDefaultProfile(undefined);
   }
+  if (settings.workspaceDefaultProfile === profile.id) {
+    await saveWorkspaceDefaultProfile(undefined);
+  }
 
   void vscode.window.showInformationMessage(`Profile '${profile.name}' removed.`);
 }

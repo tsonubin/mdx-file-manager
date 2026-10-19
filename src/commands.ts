@@ -3,6 +3,7 @@ import { AssetService } from "./assetService";
 import { AssetTreeDataProvider, AssetTreeItem } from "./assets/treeDataProvider";
 import { getSettings } from "./config";
 import { buildInsertSnippet, createInsertContext } from "./insert/patternEngine";
+import { AssetRecord } from "./types";
 
 export function registerAssetCommands(context: vscode.ExtensionContext, deps: {
   assetService: AssetService;
@@ -65,31 +66,32 @@ export function registerAssetCommands(context: vscode.ExtensionContext, deps: {
       onTreeRefreshed?.();
     }),
 
-    vscode.commands.registerCommand("mdxAssetManager.copyAssetUrl", async (item?: AssetTreeItem | { url?: string }) => {
-      const url = extractUrl(item);
-      if (!url) {
+    vscode.commands.registerCommand("mdxAssetManager.copyAssetUrl", async (item?: AssetTreeItem | AssetRecord) => {
+      const asset = toAssetRecord(item);
+      if (!asset) {
         return;
       }
-      await vscode.env.clipboard.writeText(url);
+      await vscode.env.clipboard.writeText(asset.url);
       void vscode.window.showInformationMessage("Copied asset URL.");
     }),
 
-    vscode.commands.registerCommand("mdxAssetManager.copyAssetSnippet", async (item?: AssetTreeItem) => {
-      if (!item) {
+    vscode.commands.registerCommand("mdxAssetManager.copyAssetSnippet", async (item?: AssetTreeItem | AssetRecord) => {
+      const asset = toAssetRecord(item);
+      if (!asset) {
         return;
       }
 
       const editor = vscode.window.activeTextEditor;
       const languageId = editor?.document.languageId ?? "markdown";
-      const filename = item.asset.key.split("/").pop() || item.asset.key;
+      const filename = asset.key.split("/").pop() || asset.key;
 
       const settings = getSettings(editor?.document.uri);
       const snippet = buildInsertSnippet(
         createInsertContext({
           languageId,
           filename,
-          url: item.asset.url,
-          key: item.asset.key
+          url: asset.url,
+          key: asset.key
         }),
         settings.insertRules
       );
@@ -98,13 +100,14 @@ export function registerAssetCommands(context: vscode.ExtensionContext, deps: {
       void vscode.window.showInformationMessage("Copied asset snippet.");
     }),
 
-    vscode.commands.registerCommand("mdxAssetManager.deleteAsset", async (item?: AssetTreeItem) => {
-      if (!item) {
+    vscode.commands.registerCommand("mdxAssetManager.deleteAsset", async (item?: AssetTreeItem | AssetRecord) => {
+      const asset = toAssetRecord(item);
+      if (!asset) {
         return;
       }
 
       const confirm = await vscode.window.showWarningMessage(
-        `Delete '${item.asset.key}' from remote storage?`,
+        `Delete '${asset.key}' from remote storage?`,
         { modal: true },
         "Delete"
       );
@@ -113,7 +116,7 @@ export function registerAssetCommands(context: vscode.ExtensionContext, deps: {
       }
 
       try {
-        await assetService.deleteAsset(item.asset);
+        await assetService.deleteAsset(asset);
         await treeProvider.refresh();
         onTreeRefreshed?.();
         void vscode.window.showInformationMessage("Asset deleted.");
@@ -124,16 +127,13 @@ export function registerAssetCommands(context: vscode.ExtensionContext, deps: {
   );
 }
 
-function extractUrl(item?: AssetTreeItem | { url?: string }): string | undefined {
+// Context menus pass the tree item; the tree item's click command passes the
+// underlying record. Normalize both shapes here.
+function toAssetRecord(item?: AssetTreeItem | AssetRecord): AssetRecord | undefined {
   if (!item) {
     return undefined;
   }
-
-  if (item instanceof AssetTreeItem) {
-    return item.asset.url;
-  }
-
-  return item.url;
+  return item instanceof AssetTreeItem ? item.asset : item;
 }
 
 function toMessage(error: unknown): string {
