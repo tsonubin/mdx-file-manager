@@ -31,14 +31,15 @@ export function registerAssetCommands(context: vscode.ExtensionContext, deps: {
       }
 
       try {
-        const uploaded = await vscode.window.withProgress(
+        const { uploaded } = await vscode.window.withProgress(
           {
             location: vscode.ProgressLocation.Notification,
             title: "Uploading assets"
           },
-          () => assetService.uploadFiles({
+          (_progress, token) => assetService.uploadFiles({
             filePaths: picked.map((uri) => uri.fsPath),
-            targetDocument: activeEditor.document
+            targetDocument: activeEditor.document,
+            token
           })
         );
 
@@ -55,7 +56,7 @@ export function registerAssetCommands(context: vscode.ExtensionContext, deps: {
         await treeProvider.refresh(activeEditor);
         onTreeRefreshed?.();
       } catch (error) {
-        void vscode.window.showErrorMessage(`Upload failed: ${toMessage(error)}`);
+        void vscode.window.showErrorMessage(`Uploaded, but inserting snippets failed: ${toMessage(error)}`);
       }
     }),
 

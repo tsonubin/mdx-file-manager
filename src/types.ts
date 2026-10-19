@@ -74,6 +74,16 @@ export interface UploadResult {
   snippet: string;
 }
 
+export interface UploadFailure {
+  file: string;
+  reason: string;
+}
+
+export interface UploadBatchResult {
+  uploaded: UploadResult[];
+  failures: UploadFailure[];
+}
+
 export interface ResolvedProfile {
   profile: Profile;
   source: "session" | "workspaceDefault" | "userDefault" | "single" | "picked";

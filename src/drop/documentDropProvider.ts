@@ -9,7 +9,7 @@ export class MdxDocumentDropProvider implements vscode.DocumentDropEditProvider 
     document: vscode.TextDocument,
     _position: vscode.Position,
     dataTransfer: vscode.DataTransfer,
-    _token: vscode.CancellationToken
+    token: vscode.CancellationToken
   ): Promise<vscode.DocumentDropEdit | undefined> {
     const filePaths = await getDroppedFilePaths(dataTransfer);
     if (!filePaths.length) {
@@ -17,12 +17,12 @@ export class MdxDocumentDropProvider implements vscode.DocumentDropEditProvider 
     }
 
     try {
-      const uploaded = await vscode.window.withProgress(
+      const { uploaded } = await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
           title: "Uploading dropped assets"
         },
-        () => this.assetService.uploadFiles({ filePaths, targetDocument: document })
+        () => this.assetService.uploadFiles({ filePaths, targetDocument: document, token })
       );
 
       if (!uploaded.length) {

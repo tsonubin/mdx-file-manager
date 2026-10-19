@@ -6,7 +6,7 @@ import { getSettings } from "./config";
 import { buildInsertSnippet, createInsertContext } from "./insert/patternEngine";
 import { ProfileResolver } from "./profile/resolver";
 import { SecretStore } from "./secrets";
-import { ActiveDocScope, AssetRecord, Profile, UploadResult } from "./types";
+import { ActiveDocScope, AssetRecord, Profile, UploadBatchResult, UploadFailure, UploadResult } from "./types";
 import { isSupportedDocument, relativePathOrBasename, stripExtension } from "./utils";
 import { buildObjectKey, buildScopePrefix, shortUniqueSuffix } from "./upload/keyBuilder";
 import { S3Uploader } from "./upload/s3Uploader";
@@ -43,8 +43,9 @@ export class AssetService {
     filePaths: string[];
     targetDocument: vscode.TextDocument;
     allowProfilePrompt?: boolean;
-  }): Promise<UploadResult[]> {
-    const { filePaths, targetDocument } = options;
+    token?: vscode.CancellationToken;
+  }): Promise<UploadBatchResult> {
+    const { filePaths, targetDocument, token } = options;
     const settings = getSettings(targetDocument.uri);
 
     const resolved = await this.profileResolver.resolveProfile({
@@ -54,13 +55,13 @@ export class AssetService {
     });
 
     if (!resolved) {
-      return [];
+      return { uploaded: [], failures: [] };
     }
 
     const validationErrors = this.validateProfileUsability(resolved.profile);
     if (validationErrors.length) {
       void vscode.window.showErrorMessage(validationErrors.join(" "));
-      return [];
+      return { uploaded: [], failures: [] };
     }
 
     const credentials = await this.secretStore.getProfileCredentials(resolved.profile.id);
@@ -73,48 +74,67 @@ export class AssetService {
       if (setNow === "Set Credentials") {
         await vscode.commands.executeCommand("mdxAssetManager.setProfileCredentials", resolved.profile.id);
       }
-      return [];
+      return { uploaded: [], failures: [] };
     }
 
     const uploader = new S3Uploader(resolved.profile, credentials);
     const workspaceFolder = vscode.workspace.getWorkspaceFolder(targetDocument.uri);
     const scope = this.scopeFromDocument(targetDocument, resolved.profile, workspaceFolder);
 
-    const uploads: UploadResult[] = [];
+    const uploaded: UploadResult[] = [];
+    const failures: UploadFailure[] = [];
     for (const filePath of filePaths) {
-      const stat = await fs.stat(filePath);
-      const ext = path.extname(filePath).toLowerCase();
-      const maxBytes = settings.maxUploadSizeMB * 1024 * 1024;
-
-      if (stat.size > maxBytes) {
-        void vscode.window.showWarningMessage(`Skipped ${path.basename(filePath)}: exceeds ${settings.maxUploadSizeMB}MB.`);
-        continue;
+      if (token?.isCancellationRequested) {
+        break;
       }
 
-      if (settings.allowedExtensions.length && !settings.allowedExtensions.includes(ext)) {
-        void vscode.window.showWarningMessage(`Skipped ${path.basename(filePath)}: extension ${ext} is not allowed.`);
-        continue;
+      const file = path.basename(filePath);
+      try {
+        const stat = await fs.stat(filePath);
+        if (!stat.isFile()) {
+          failures.push({ file, reason: "not a regular file" });
+          continue;
+        }
+
+        const ext = path.extname(filePath).toLowerCase();
+        const maxBytes = settings.maxUploadSizeMB * 1024 * 1024;
+
+        if (stat.size > maxBytes) {
+          failures.push({ file, reason: `exceeds ${settings.maxUploadSizeMB}MB` });
+          continue;
+        }
+
+        if (settings.allowedExtensions.length && !settings.allowedExtensions.includes(ext)) {
+          failures.push({ file, reason: `extension ${ext || "(none)"} is not allowed` });
+          continue;
+        }
+
+        const key = await this.ensureUniqueKey(uploader, scope.keyPrefix, filePath);
+        const url = await uploader.uploadFile(filePath, key);
+        const context = createInsertContext({
+          languageId: targetDocument.languageId,
+          filename: path.basename(filePath),
+          extension: ext,
+          url,
+          key,
+          mime: (mimeLookup(filePath) || "application/octet-stream").toString()
+        });
+
+        uploaded.push({
+          key,
+          url,
+          snippet: buildInsertSnippet(context, settings.insertRules)
+        });
+      } catch (error) {
+        failures.push({ file, reason: error instanceof Error ? error.message : String(error) });
       }
-
-      const key = await this.ensureUniqueKey(uploader, scope.keyPrefix, filePath);
-      const url = await uploader.uploadFile(filePath, key);
-      const context = createInsertContext({
-        languageId: targetDocument.languageId,
-        filename: path.basename(filePath),
-        extension: ext,
-        url,
-        key,
-        mime: (mimeLookup(filePath) || "application/octet-stream").toString()
-      });
-
-      uploads.push({
-        key,
-        url,
-        snippet: buildInsertSnippet(context, settings.insertRules)
-      });
     }
 
-    return uploads;
+    if (failures.length) {
+      void vscode.window.showWarningMessage(summarizeUploadFailures(failures));
+    }
+
+    return { uploaded, failures };
   }
 
   async listAssetsForActiveDocument(editor = vscode.window.activeTextEditor): Promise<AssetRecord[]> {
@@ -207,4 +227,11 @@ export class AssetService {
 
     return errors;
   }
+}
+
+function summarizeUploadFailures(failures: UploadFailure[]): string {
+  const shown = failures.slice(0, 3).map((failure) => `${failure.file} — ${failure.reason}`);
+  const remaining = failures.length - shown.length;
+  const details = remaining > 0 ? `${shown.join("; ")}; +${remaining} more` : shown.join("; ");
+  return `Failed to upload ${failures.length} file(s): ${details}`;
 }

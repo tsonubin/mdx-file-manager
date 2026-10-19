@@ -4,7 +4,8 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { suite, test } from "mocha";
 import { MdxDocumentDropProvider } from "../../drop/documentDropProvider";
-import type { UploadResult } from "../../types";
+import type { AssetService } from "../../assetService";
+import type { UploadBatchResult, UploadResult } from "../../types";
 
 suite("Document Drop Provider", () => {
   test("builds a drop edit from text/uri-list payload", async () => {
@@ -21,12 +22,13 @@ suite("Document Drop Provider", () => {
     ];
 
     const provider = new MdxDocumentDropProvider({
-      async uploadFiles(options: { filePaths: string[]; targetDocument: vscode.TextDocument }): Promise<UploadResult[]> {
+      async uploadFiles(options: { filePaths: string[]; targetDocument: vscode.TextDocument }): Promise<UploadBatchResult> {
         captured.filePaths = options.filePaths;
         captured.document = options.targetDocument;
-        return mockResult;
+        return { uploaded: mockResult, failures: [] };
       }
-    } as any);
+      // Stub implements only the uploadFiles method the provider calls.
+    } as unknown as AssetService);
 
     const dataTransfer = new vscode.DataTransfer();
     dataTransfer.set("text/uri-list", new vscode.DataTransferItem(vscode.Uri.file(droppedFile).toString()));
@@ -47,10 +49,11 @@ suite("Document Drop Provider", () => {
 
   test("returns undefined when no file payload exists", async () => {
     const provider = new MdxDocumentDropProvider({
-      async uploadFiles(): Promise<UploadResult[]> {
+      async uploadFiles(): Promise<UploadBatchResult> {
         throw new Error("Should not be called");
       }
-    } as any);
+      // Stub implements only the uploadFiles method the provider calls.
+    } as unknown as AssetService);
 
     const document = await vscode.workspace.openTextDocument({ language: "markdown", content: "" });
     const emptyDataTransfer = new vscode.DataTransfer();
