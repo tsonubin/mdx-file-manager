@@ -18,6 +18,59 @@ VS Code extension for Markdown/MDX/HTML media workflows:
 - Custom insertion rules with token templates
 - Asset explorer actions: copy URL, copy snippet, delete
 
+## Uploads and keys
+
+Objects are stored under `<basePrefix>/<document-path>/<document-name>/<file-name>`,
+e.g. uploading `hero.png` into `content/blog/my-post.mdx` lands in
+`assets/content/blog/my-post/hero.png`. Path segments are sanitized
+(lowercase, `[a-z0-9._-]` only).
+
+If the target key already exists — or uniqueness cannot be verified on the
+store — the file is uploaded under a `-<suffix>` variant instead of
+overwriting. Uploading a new version of the same file therefore creates a new
+object; delete the old one from the `MDX Assets` view if it is no longer used.
+
+## Profile resolution
+
+Uploads pick a profile in this order:
+
+1. Session override (`Mdx Assets: Switch Active Profile (Session)`)
+2. Workspace default (`mdxAssetManager.workspaceDefaultProfile`)
+3. User default (`mdxAssetManager.defaultProfile`)
+4. The only configured profile, if exactly one exists
+5. Interactive pick (uploads prompted from the editor only)
+
+The `MDX Assets` sidebar listing uses the same resolution non-interactively.
+
+## Credentials and security
+
+Access keys are stored in VS Code `SecretStorage` per profile — never in
+settings, so they are not committed with `.vscode/settings.json`. Settings
+hold only non-secret profile data (bucket, endpoint, base URL).
+
+Generated snippets escape filenames and URLs for their output context, so
+oddly named files cannot break out of the emitted markup. Things to know:
+
+- `.svg` uploads are allowed by default; if `publicBaseUrl` shares an origin
+  with your app, served SVGs are a script-execution vector — consider
+  removing `.svg` from `mdxAssetManager.allowedExtensions` or serving assets
+  from a dedicated origin.
+- `Mdx Assets: Add Endpoint Profile` can run a connection check that writes
+  and deletes a small `__mdx_asset_manager_probe__/` object in the bucket.
+
+## Troubleshooting
+
+- **Upload fails with 403**: the key needs `s3:PutObject` (and ideally
+  `s3:GetObject`/`s3:ListBucket`/`s3:DeleteObject` for the sidebar). Missing
+  `ListBucket` is tolerated: uploads fall back to suffixed keys.
+- **Files are skipped with "extension ... is not allowed"**: extend
+  `mdxAssetManager.allowedExtensions`.
+- **A "Failed to upload N file(s)" notification appears**: each file is
+  isolated; the notification lists the per-file reasons and successful
+  snippets are still inserted.
+- **Sidebar shows "Open an MDX/Markdown/HTML file"**: listing is scoped to
+  the active document.
+
 ## Settings
 
 - `mdxAssetManager.profiles`: endpoint profiles
