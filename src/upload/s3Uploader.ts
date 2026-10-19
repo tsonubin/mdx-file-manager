@@ -80,7 +80,7 @@ export class S3Uploader {
     }
   }
 
-  async listByPrefix(prefix: string): Promise<ListedObject[]> {
+  async listByPrefix(prefix: string, options?: { abortSignal?: AbortSignal }): Promise<ListedObject[]> {
     const all: ListedObject[] = [];
     let token: string | undefined;
     do {
@@ -89,7 +89,8 @@ export class S3Uploader {
           Bucket: this.profile.bucket,
           Prefix: prefix,
           ContinuationToken: token
-        })
+        }),
+        { abortSignal: options?.abortSignal }
       );
 
       for (const item of output.Contents ?? []) {

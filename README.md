@@ -90,6 +90,7 @@ oddly named files cannot break out of the emitted markup. Things to know:
 - **A "Failed to upload N file(s)" notification appears**: each file is
   isolated; the notification lists the per-file reasons and successful
   snippets are still inserted.
+- **Upload notification says it was canceled**: completed uploads are kept; files that were still pending are not started or retried.
 - **Sidebar shows "Open an MDX/Markdown/HTML file"**: listing is scoped to
   the active document.
 - **Sidebar is empty**: the status line names the cause — no profiles

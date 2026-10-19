@@ -145,6 +145,12 @@ export class AssetService {
     }
     cancelSubscription?.dispose();
 
+    if (cancellation.signal.aborted) {
+      const remaining = Math.max(0, filePaths.length - uploaded.length - failures.length);
+      void vscode.window.showInformationMessage(
+        `Upload canceled. Kept ${uploaded.length} completed upload(s); ${remaining} file(s) were not completed.`
+      );
+    }
     if (failures.length) {
       void vscode.window.showWarningMessage(summarizeUploadFailures(failures));
     }
@@ -157,7 +163,7 @@ export class AssetService {
     return { uploaded, failures };
   }
 
-  async listAssetsForActiveDocument(editor = vscode.window.activeTextEditor): Promise<AssetListing | undefined> {
+  async listAssetsForActiveDocument(editor = vscode.window.activeTextEditor, abortSignal?: AbortSignal): Promise<AssetListing | undefined> {
     const scope = this.getActiveScope(editor);
     if (!scope) {
       return undefined;
@@ -180,7 +186,7 @@ export class AssetService {
 
     const uploader = new S3Uploader(resolved.profile, credentials);
     const prefix = buildScopePrefix(scope, resolved.profile);
-    const listed = await uploader.listByPrefix(`${prefix}/`);
+    const listed = await uploader.listByPrefix(`${prefix}/`, { abortSignal });
     return {
       kind: "listed",
       profileName: resolved.profile.name,

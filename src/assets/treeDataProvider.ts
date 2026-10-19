@@ -25,6 +25,7 @@ export class AssetTreeDataProvider implements vscode.TreeDataProvider<AssetTreeI
   private assets: AssetRecord[] = [];
   private statusMessage = "Open an MDX/Markdown/HTML file to view assets.";
   private refreshGeneration = 0;
+  private refreshCancellation?: AbortController;
 
   constructor(private readonly assetService: AssetService) {}
 
@@ -34,8 +35,12 @@ export class AssetTreeDataProvider implements vscode.TreeDataProvider<AssetTreeI
 
   async refresh(editor = vscode.window.activeTextEditor): Promise<void> {
     const generation = ++this.refreshGeneration;
+    this.refreshCancellation?.abort();
+    const cancellation = new AbortController();
+    this.refreshCancellation = cancellation;
 
     if (!editor || !isSupportedDocument(editor.document)) {
+      this.refreshCancellation = undefined;
       this.assets = [];
       this.statusMessage = "Open an MDX/Markdown/HTML file to view scoped assets.";
       this.onDidChangeTreeDataEmitter.fire();
@@ -43,7 +48,7 @@ export class AssetTreeDataProvider implements vscode.TreeDataProvider<AssetTreeI
     }
 
     try {
-      const listing = await this.assetService.listAssetsForActiveDocument(editor);
+      const listing = await this.assetService.listAssetsForActiveDocument(editor, cancellation.signal);
       if (generation !== this.refreshGeneration) {
         return;
       }
@@ -66,12 +71,16 @@ export class AssetTreeDataProvider implements vscode.TreeDataProvider<AssetTreeI
         }
       }
     } catch (error) {
-      if (generation !== this.refreshGeneration) {
+      if (generation !== this.refreshGeneration || cancellation.signal.aborted) {
         return;
       }
       // Keep the last known items; a transient listing failure should only
       // change the status line, not blank the view.
       this.statusMessage = `Failed to load assets: ${describeError(error)}`;
+    } finally {
+      if (generation === this.refreshGeneration && this.refreshCancellation === cancellation) {
+        this.refreshCancellation = undefined;
+      }
     }
 
     this.onDidChangeTreeDataEmitter.fire();
@@ -86,6 +95,9 @@ export class AssetTreeDataProvider implements vscode.TreeDataProvider<AssetTreeI
   }
 
   dispose(): void {
+    this.refreshCancellation?.abort();
+    this.refreshCancellation = undefined;
     this.onDidChangeTreeDataEmitter.dispose();
   }
+
 }

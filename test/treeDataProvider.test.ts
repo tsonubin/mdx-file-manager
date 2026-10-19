@@ -57,4 +57,24 @@ describe("AssetTreeDataProvider status", () => {
     await provider.refresh(editor);
     expect(provider.getStatusMessage()).toBe("Prod R2 • 0 assets");
   });
+
+  it("aborts the previous listing when a newer refresh starts", async () => {
+    const pending: Array<{ signal: AbortSignal; resolve: (listing: AssetListing) => void }> = [];
+    const assetService = {
+      listAssetsForActiveDocument: (_editor: unknown, signal: AbortSignal) =>
+        new Promise<AssetListing>((resolve) => pending.push({ signal, resolve }))
+    } as unknown as AssetService;
+    const provider = new AssetTreeDataProvider(assetService);
+    const editor = { document: { languageId: "markdown", fileName: "post.md" } } as vscode.TextEditor;
+
+    const first = provider.refresh(editor);
+    const firstRequest = pending[0];
+    const second = provider.refresh(editor);
+
+    expect(firstRequest.signal.aborted).toBe(true);
+    pending[1].resolve({ kind: "listed", profileName: "Prod", assets: [] });
+    await second;
+    firstRequest.resolve({ kind: "listed", profileName: "Stale", assets: [] });
+    await first;
+  });
 });
