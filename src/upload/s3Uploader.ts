@@ -1,4 +1,5 @@
 import * as fs from "node:fs/promises";
+import { createReadStream } from "node:fs";
 import {
   DeleteObjectCommand,
   HeadObjectCommand,
@@ -35,16 +36,18 @@ export class S3Uploader {
   }
 
   async uploadFile(localPath: string, key: string): Promise<string> {
-    const fileData = await fs.readFile(localPath);
     const contentType = mimeLookup(localPath) || "application/octet-stream";
+    // Stream the body: maxUploadSizeMB defaults to 100MB, so buffering the
+    // whole file would pin it in memory for the duration of the PUT.
+    const { size } = await fs.stat(localPath);
 
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.profile.bucket,
         Key: key,
-        Body: fileData,
-        ContentType: contentType,
-        ACL: undefined
+        Body: createReadStream(localPath),
+        ContentLength: size,
+        ContentType: contentType
       })
     );
 
