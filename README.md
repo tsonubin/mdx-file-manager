@@ -28,7 +28,8 @@ e.g. uploading `hero.png` into `content/blog/my-post.mdx` lands in
 If the target key already exists — or uniqueness cannot be verified on the
 store — the file is uploaded under a `-<suffix>` variant instead of
 overwriting. Uploading a new version of the same file therefore creates a new
-object; delete the old one from the `MDX Assets` view if it is no longer used.
+object; a notification lists every upload that got a fallback name. Delete
+the old one from the `MDX Assets` view when it is no longer used.
 
 ## Profile resolution
 

@@ -83,6 +83,7 @@ export class AssetService {
 
     const uploaded: UploadResult[] = [];
     const failures: UploadFailure[] = [];
+    const renames: string[] = [];
     for (const filePath of filePaths) {
       if (token?.isCancellationRequested) {
         break;
@@ -109,7 +110,7 @@ export class AssetService {
           continue;
         }
 
-        const key = await this.ensureUniqueKey(uploader, scope.keyPrefix, filePath);
+        const { key, fallback } = await this.ensureUniqueKey(uploader, scope.keyPrefix, filePath);
         const url = await uploader.uploadFile(filePath, key);
         const context = createInsertContext({
           languageId: targetDocument.languageId,
@@ -124,6 +125,9 @@ export class AssetService {
           url,
           snippet: buildInsertSnippet(context, settings.insertRules)
         });
+        if (fallback) {
+          renames.push(`${file} → ${key.split("/").pop() ?? key}`);
+        }
       } catch (error) {
         failures.push({ file, reason: error instanceof Error ? error.message : String(error) });
       }
@@ -131,6 +135,11 @@ export class AssetService {
 
     if (failures.length) {
       void vscode.window.showWarningMessage(summarizeUploadFailures(failures));
+    }
+    if (renames.length) {
+      void vscode.window.showInformationMessage(
+        `Uploaded under a new name to keep existing assets intact: ${renames.join("; ")}. Nothing is overwritten — remove old versions from the MDX Assets view when they are no longer used.`
+      );
     }
 
     return { uploaded, failures };
@@ -194,13 +203,13 @@ export class AssetService {
     };
   }
 
-  private async ensureUniqueKey(uploader: S3Uploader, prefix: string, filePath: string): Promise<string> {
+  private async ensureUniqueKey(uploader: S3Uploader, prefix: string, filePath: string): Promise<{ key: string; fallback: boolean }> {
     let attempt = 0;
     while (attempt < 10) {
       const key = buildObjectKey(prefix, filePath, attempt ? shortUniqueSuffix() : undefined);
       const exists = await uploader.keyExists(key);
       if (exists === false) {
-        return key;
+        return { key, fallback: attempt > 0 };
       }
       if (exists === "unknown") {
         break;
@@ -210,7 +219,7 @@ export class AssetService {
 
     // Uniqueness unverifiable or exhausted: fail safe with a unique suffix
     // instead of risking overwriting an existing object.
-    return buildObjectKey(prefix, filePath, `${Date.now()}-${shortUniqueSuffix()}`);
+    return { key: buildObjectKey(prefix, filePath, `${Date.now()}-${shortUniqueSuffix()}`), fallback: true };
   }
 }
 
