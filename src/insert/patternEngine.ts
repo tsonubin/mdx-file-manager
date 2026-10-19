@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import { lookup as mimeLookup } from "mime-types";
 import { InsertContext, InsertRule } from "../types";
 
@@ -35,22 +36,24 @@ export function buildInsertSnippet(context: InsertContext, rules: InsertRule[]):
 export function createInsertContext(input: {
   languageId: string;
   filename: string;
-  extension: string;
   url: string;
   key: string;
   mime?: string;
 }): InsertContext {
   const mime = input.mime || (mimeLookup(input.filename) || "application/octet-stream").toString();
-  const basename = input.filename.slice(0, Math.max(0, input.filename.length - input.extension.length));
+  // Derive ext/basename from the filename itself. Callers used to pass their
+  // own extension, and one derived it from the whole key, so a dotted
+  // directory name corrupted basename and alt.
+  const ext = path.extname(input.filename).toLowerCase();
+  const basename = input.filename.slice(0, Math.max(0, input.filename.length - ext.length));
 
   return {
     languageId: normalizeLanguageId(input.languageId),
-    extension: input.extension.toLowerCase(),
     mime: mime.toLowerCase(),
     url: input.url,
     filename: input.filename,
     basename,
-    ext: input.extension.toLowerCase(),
+    ext,
     key: input.key,
     alt: humanizeAlt(basename)
   };

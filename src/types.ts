@@ -49,7 +49,6 @@ export interface ActiveDocScope {
 
 export interface InsertContext {
   languageId: string;
-  extension: string;
   mime: string;
   url: string;
   filename: string;

@@ -114,7 +114,6 @@ export class AssetService {
         const context = createInsertContext({
           languageId: targetDocument.languageId,
           filename: path.basename(filePath),
-          extension: ext,
           url,
           key,
           mime: (mimeLookup(filePath) || "application/octet-stream").toString()

@@ -6,7 +6,6 @@ describe("patternEngine", () => {
     const context = createInsertContext({
       languageId: "mdx",
       filename: "hero.mp4",
-      extension: ".mp4",
       url: "https://cdn.example.com/assets/hero.mp4",
       key: "assets/hero.mp4",
       mime: "video/mp4"
@@ -29,7 +28,6 @@ describe("patternEngine", () => {
     const context = createInsertContext({
       languageId: "markdown",
       filename: "cover.png",
-      extension: ".png",
       url: "https://cdn.example.com/assets/cover.png",
       key: "assets/cover.png",
       mime: "image/png"
@@ -42,7 +40,6 @@ describe("patternEngine", () => {
     const context = createInsertContext({
       languageId: "html",
       filename: "x.pdf",
-      extension: ".pdf",
       url: "https://cdn.example.com/x.pdf",
       key: "x.pdf",
       mime: "application/pdf"
@@ -55,7 +52,6 @@ describe("patternEngine", () => {
     const htmlContext = createInsertContext({
       languageId: "html",
       filename: 'a" onerror="x.png',
-      extension: ".png",
       url: 'https://cdn.example.com/a.png" bad="y',
       key: "assets/a.png",
       mime: "image/png"
@@ -68,12 +64,31 @@ describe("patternEngine", () => {
     const mdContext = createInsertContext({
       languageId: "markdown",
       filename: "a](evil).png",
-      extension: ".png",
       url: "https://cdn.example.com/a b.png",
       key: "assets/a b.png",
       mime: "image/png"
     });
 
     expect(buildInsertSnippet(mdContext, [])).toBe("![a\\]\\(evil\\)](https://cdn.example.com/a%20b.png)");
+  });
+
+  it("derives ext and basename from the filename", () => {
+    const dotted = createInsertContext({
+      languageId: "markdown",
+      filename: "archive.tar.gz",
+      url: "https://cdn.example.com/assets/v1.2/archive.tar.gz",
+      key: "assets/v1.2/archive.tar.gz"
+    });
+    expect(dotted.ext).toBe(".gz");
+    expect(dotted.basename).toBe("archive.tar");
+
+    const bare = createInsertContext({
+      languageId: "markdown",
+      filename: "hero",
+      url: "https://cdn.example.com/assets/v1.2/hero",
+      key: "assets/v1.2/hero"
+    });
+    expect(bare.ext).toBe("");
+    expect(bare.basename).toBe("hero");
   });
 });

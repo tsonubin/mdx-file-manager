@@ -81,7 +81,6 @@ export function registerAssetCommands(context: vscode.ExtensionContext, deps: {
 
       const editor = vscode.window.activeTextEditor;
       const languageId = editor?.document.languageId ?? "markdown";
-      const extension = item.asset.key.includes(".") ? `.${item.asset.key.split(".").pop()?.toLowerCase() ?? ""}` : "";
       const filename = item.asset.key.split("/").pop() || item.asset.key;
 
       const settings = getSettings(editor?.document.uri);
@@ -89,7 +88,6 @@ export function registerAssetCommands(context: vscode.ExtensionContext, deps: {
         createInsertContext({
           languageId,
           filename,
-          extension,
           url: item.asset.url,
           key: item.asset.key
         }),
