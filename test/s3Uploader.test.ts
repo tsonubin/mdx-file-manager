@@ -1,4 +1,7 @@
+import * as fs from "node:fs/promises";
 import { createServer } from "node:http";
+import * as os from "node:os";
+import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import { Profile } from "../src/types";
 import { S3Uploader } from "../src/upload/s3Uploader";
@@ -81,6 +84,49 @@ describe("S3Uploader", () => {
       expect(requests[2].path).toBe(requests[1].path);
     } finally {
       server.close();
+    }
+  });
+
+  it("aborts in-flight requests when the abort signal fires", async () => {
+    // Server accepts connections but never responds: without abort wiring
+    // both calls would hang until the test timed out.
+    const server = createServer((request) => {
+      request.resume();
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") {
+      throw new Error("stub server must report a port");
+    }
+
+    const profile = {
+      id: "stub",
+      name: "Stub",
+      provider: "custom-s3",
+      bucket: "bucket",
+      endpoint: `http://127.0.0.1:${address.port}`,
+      publicBaseUrl: "https://cdn.example.com",
+      forcePathStyle: true
+    } satisfies Profile;
+    const uploader = new S3Uploader(profile, { accessKeyId: "a", secretAccessKey: "b" });
+
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mdx-upload-"));
+    const filePath = path.join(dir, "a.png");
+    await fs.writeFile(filePath, "fake");
+
+    try {
+      const putController = new AbortController();
+      const upload = uploader.uploadFile(filePath, "assets/a.png", { abortSignal: putController.signal });
+      putController.abort();
+      await expect(upload).rejects.toThrow(/abort/i);
+
+      const probeController = new AbortController();
+      const probe = uploader.keyExists("assets/a.png", { abortSignal: probeController.signal });
+      probeController.abort();
+      await expect(probe).rejects.toThrow(/abort/i);
+    } finally {
+      server.close();
+      await fs.rm(dir, { recursive: true, force: true });
     }
   });
 });

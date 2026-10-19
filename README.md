@@ -31,6 +31,9 @@ overwriting. Uploading a new version of the same file therefore creates a new
 object; a notification lists every upload that got a fallback name. Delete
 the old one from the `MDX Assets` view when it is no longer used.
 
+The progress notification's **Cancel** button aborts transfers in flight and
+stops the rest of the batch; files already uploaded are kept.
+
 ## Profile resolution
 
 Uploads pick a profile in this order:

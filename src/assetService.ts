@@ -84,8 +84,15 @@ export class AssetService {
     const uploaded: UploadResult[] = [];
     const failures: UploadFailure[] = [];
     const renames: string[] = [];
+    // One controller per batch: cancellation must abort the PUT in flight,
+    // not just skip the files that have not started.
+    const cancellation = new AbortController();
+    const cancelSubscription = token?.onCancellationRequested(() => cancellation.abort());
+    if (token?.isCancellationRequested) {
+      cancellation.abort();
+    }
     for (const filePath of filePaths) {
-      if (token?.isCancellationRequested) {
+      if (cancellation.signal.aborted) {
         break;
       }
 
@@ -110,8 +117,8 @@ export class AssetService {
           continue;
         }
 
-        const { key, fallback } = await this.ensureUniqueKey(uploader, scope.keyPrefix, filePath);
-        const url = await uploader.uploadFile(filePath, key);
+        const { key, fallback } = await this.ensureUniqueKey(uploader, scope.keyPrefix, filePath, cancellation.signal);
+        const url = await uploader.uploadFile(filePath, key, { abortSignal: cancellation.signal });
         const context = createInsertContext({
           languageId: targetDocument.languageId,
           filename: path.basename(filePath),
@@ -129,9 +136,14 @@ export class AssetService {
           renames.push(`${file} → ${key.split("/").pop() ?? key}`);
         }
       } catch (error) {
+        if (cancellation.signal.aborted) {
+          // Cancellation is not a per-file failure.
+          break;
+        }
         failures.push({ file, reason: describeError(error) });
       }
     }
+    cancelSubscription?.dispose();
 
     if (failures.length) {
       void vscode.window.showWarningMessage(summarizeUploadFailures(failures));
@@ -203,11 +215,11 @@ export class AssetService {
     };
   }
 
-  private async ensureUniqueKey(uploader: S3Uploader, prefix: string, filePath: string): Promise<{ key: string; fallback: boolean }> {
+  private async ensureUniqueKey(uploader: S3Uploader, prefix: string, filePath: string, abortSignal: AbortSignal): Promise<{ key: string; fallback: boolean }> {
     let attempt = 0;
     while (attempt < 10) {
       const key = buildObjectKey(prefix, filePath, attempt ? shortUniqueSuffix() : undefined);
-      const exists = await uploader.keyExists(key);
+      const exists = await uploader.keyExists(key, { abortSignal });
       if (exists === false) {
         return { key, fallback: attempt > 0 };
       }

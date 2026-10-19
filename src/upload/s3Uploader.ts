@@ -35,7 +35,7 @@ export class S3Uploader {
     });
   }
 
-  async uploadFile(localPath: string, key: string): Promise<string> {
+  async uploadFile(localPath: string, key: string, options?: { abortSignal?: AbortSignal }): Promise<string> {
     const contentType = mimeLookup(localPath) || "application/octet-stream";
     // Stream the body: maxUploadSizeMB defaults to 100MB, so buffering the
     // whole file would pin it in memory for the duration of the PUT.
@@ -48,19 +48,21 @@ export class S3Uploader {
         Body: createReadStream(localPath),
         ContentLength: size,
         ContentType: contentType
-      })
+      }),
+      { abortSignal: options?.abortSignal }
     );
 
     return joinUrl(this.profile.publicBaseUrl, key);
   }
 
-  async keyExists(key: string): Promise<boolean | "unknown"> {
+  async keyExists(key: string, options?: { abortSignal?: AbortSignal }): Promise<boolean | "unknown"> {
     try {
       await this.client.send(
         new HeadObjectCommand({
           Bucket: this.profile.bucket,
           Key: key
-        })
+        }),
+        { abortSignal: options?.abortSignal }
       );
       return true;
     } catch (error) {
