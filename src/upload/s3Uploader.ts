@@ -21,17 +21,17 @@ export interface ListedObject {
 export class S3Uploader {
   private readonly client: S3Client;
 
-  constructor(private readonly profile: Profile, private readonly credentials?: ProfileCredentials) {
+  // Credentials are always explicit (SecretStorage); there is deliberately no
+  // ambient AWS chain fallback.
+  constructor(private readonly profile: Profile, private readonly credentials: ProfileCredentials) {
     this.client = new S3Client({
       region: resolveRegion(profile),
       endpoint: resolveEndpoint(profile),
       forcePathStyle: profile.forcePathStyle ?? profile.provider === "custom-s3",
-      credentials: credentials
-        ? {
-            accessKeyId: credentials.accessKeyId,
-            secretAccessKey: credentials.secretAccessKey
-          }
-        : undefined
+      credentials: {
+        accessKeyId: credentials.accessKeyId,
+        secretAccessKey: credentials.secretAccessKey
+      }
     });
   }
 
