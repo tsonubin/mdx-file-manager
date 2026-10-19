@@ -17,7 +17,8 @@ suite("Document Drop Provider", () => {
       {
         key: "assets/content/post/sample-image.png",
         url: "https://cdn.example.com/assets/content/post/sample-image.png",
-        snippet: "![sample image](https://cdn.example.com/assets/content/post/sample-image.png)"
+        // $1 is snippet syntax; it must land in the document literally.
+        snippet: "![sample image](https://cdn.example.com/assets/content/post/sample-image$1.png)"
       }
     ];
 
@@ -43,8 +44,7 @@ suite("Document Drop Provider", () => {
     assert.ok(edit, "Expected a document drop edit");
     assert.deepEqual(captured.filePaths, [droppedFile]);
     assert.equal(captured.document, document);
-    assert.ok(edit?.insertText instanceof vscode.SnippetString);
-    assert.equal((edit?.insertText as vscode.SnippetString).value, mockResult[0].snippet);
+    assert.equal(edit?.insertText, mockResult[0].snippet);
   });
 
   test("returns undefined when no file payload exists", async () => {

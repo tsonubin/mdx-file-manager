@@ -32,7 +32,9 @@ export class MdxDocumentDropProvider implements vscode.DocumentDropEditProvider 
       const snippetText = uploaded.map((item) => item.snippet).join("\n");
       this.onUploaded?.();
 
-      return new vscode.DocumentDropEdit(new vscode.SnippetString(snippetText));
+      // Plain text, not a SnippetString: snippet syntax ($…) inside URLs or
+      // user templates must land in the document literally.
+      return new vscode.DocumentDropEdit(snippetText);
     } catch (error) {
       void vscode.window.showErrorMessage(`Upload failed: ${toMessage(error)}`);
       return undefined;
