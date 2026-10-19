@@ -47,7 +47,9 @@ The `MDX Assets` sidebar listing uses the same resolution non-interactively.
 
 Access keys are stored in VS Code `SecretStorage` per profile — never in
 settings, so they are not committed with `.vscode/settings.json`. Settings
-hold only non-secret profile data (bucket, endpoint, base URL).
+hold only non-secret profile data (bucket, endpoint, base URL). Uploads and
+the sidebar use only these stored keys; ambient AWS credentials (env vars,
+`~/.aws`) are never consulted.
 
 Generated snippets escape filenames and URLs for their output context, so
 oddly named files cannot break out of the emitted markup. Things to know:
@@ -116,7 +118,7 @@ oddly named files cannot break out of the emitted markup. Things to know:
 ## Commands
 
 - `Mdx Assets: Add Endpoint Profile`
-- `Mdx Assets: Edit Endpoint Profile`
+- `Mdx Assets: Edit Endpoint Profile` (display name, endpoint fields, credentials)
 - `Mdx Assets: Remove Endpoint Profile`
 - `Mdx Assets: Set Workspace Default Profile`
 - `Mdx Assets: Switch Active Profile (Session)`
