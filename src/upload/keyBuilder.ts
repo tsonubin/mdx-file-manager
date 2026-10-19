@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import * as path from "node:path";
 import { ActiveDocScope, Profile } from "../types";
 import { sanitizeSegment, stripExtension } from "../utils";
@@ -32,6 +33,8 @@ export function buildObjectKey(prefix: string, filePath: string, suffix?: string
   return `${prefix}/${finalName}`.replace(/\/+/g, "/");
 }
 
+// 3 random bytes render as a 6-char hex suffix; enough to separate colliding
+// uploads without bloating the key.
 export function shortUniqueSuffix(): string {
-  return Math.random().toString(36).slice(2, 8);
+  return randomBytes(3).toString("hex");
 }

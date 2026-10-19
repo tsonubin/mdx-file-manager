@@ -54,7 +54,7 @@ export class S3Uploader {
     return joinUrl(this.profile.publicBaseUrl, key);
   }
 
-  async keyExists(key: string): Promise<boolean> {
+  async keyExists(key: string): Promise<boolean | "unknown"> {
     try {
       await this.client.send(
         new HeadObjectCommand({
@@ -64,8 +64,15 @@ export class S3Uploader {
       );
       return true;
     } catch (error) {
-      if (error instanceof S3ServiceException && (error.$metadata.httpStatusCode === 404 || error.name === "NotFound")) {
+      const status = error instanceof S3ServiceException ? error.$metadata.httpStatusCode : undefined;
+      const name = error instanceof S3ServiceException ? error.name : undefined;
+      if (status === 404 || name === "NotFound") {
         return false;
+      }
+      if (status === 403 || name === "AccessDenied" || name === "Forbidden") {
+        // Least-privilege keys without s3:ListBucket (and some MinIO setups)
+        // answer 403 for missing objects; uniqueness cannot be verified.
+        return "unknown";
       }
       throw error;
     }

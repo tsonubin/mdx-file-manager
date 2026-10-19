@@ -200,12 +200,17 @@ export class AssetService {
     while (attempt < 10) {
       const key = buildObjectKey(prefix, filePath, attempt ? shortUniqueSuffix() : undefined);
       const exists = await uploader.keyExists(key);
-      if (!exists) {
+      if (exists === false) {
         return key;
+      }
+      if (exists === "unknown") {
+        break;
       }
       attempt += 1;
     }
 
+    // Uniqueness unverifiable or exhausted: fail safe with a unique suffix
+    // instead of risking overwriting an existing object.
     return buildObjectKey(prefix, filePath, `${Date.now()}-${shortUniqueSuffix()}`);
   }
 
