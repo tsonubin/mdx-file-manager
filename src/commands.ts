@@ -49,11 +49,17 @@ export function registerAssetCommands(context: vscode.ExtensionContext, deps: {
           return;
         }
 
-        await activeEditor.edit((editBuilder) => {
+        const inserted = await activeEditor.edit((editBuilder) => {
           const insertion = uploaded.map((item) => item.snippet).join("\n");
           const selection = activeEditor.selection;
           editBuilder.insert(selection.active, insertion);
         });
+
+        if (!inserted) {
+          // The files uploaded but the edit was rejected (e.g. the document
+          // changed on disk); the snippets only exist in the sidebar now.
+          void vscode.window.showWarningMessage("Upload succeeded, but the snippet could not be inserted. Copy it from the MDX Assets view.");
+        }
 
         await treeProvider.refresh(activeEditor);
         onTreeRefreshed?.();
