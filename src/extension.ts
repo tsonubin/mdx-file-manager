@@ -42,6 +42,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     treeView,
+    treeProvider,
     vscode.languages.registerDocumentDropEditProvider(
       [
         { language: "markdown" },

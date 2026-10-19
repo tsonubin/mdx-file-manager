@@ -18,7 +18,7 @@ export class AssetTreeItem extends vscode.TreeItem {
   }
 }
 
-export class AssetTreeDataProvider implements vscode.TreeDataProvider<AssetTreeItem> {
+export class AssetTreeDataProvider implements vscode.TreeDataProvider<AssetTreeItem>, vscode.Disposable {
   private readonly onDidChangeTreeDataEmitter = new vscode.EventEmitter<AssetTreeItem | void>();
   readonly onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
 
@@ -69,5 +69,9 @@ export class AssetTreeDataProvider implements vscode.TreeDataProvider<AssetTreeI
 
   getChildren(): vscode.ProviderResult<AssetTreeItem[]> {
     return this.assets.map((asset) => new AssetTreeItem(asset));
+  }
+
+  dispose(): void {
+    this.onDidChangeTreeDataEmitter.dispose();
   }
 }
