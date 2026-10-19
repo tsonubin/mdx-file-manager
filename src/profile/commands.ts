@@ -128,8 +128,16 @@ async function editProfile(secretStore: SecretStore): Promise<void> {
     return;
   }
 
+  // The id stays fixed: SecretStorage credentials and saved defaults are
+  // keyed by it.
+  const name = await prompt("Profile name", original.name, (value) => (!value.trim() ? "Profile name is required." : undefined));
+  if (!name) {
+    return;
+  }
+
   const profile = await promptProfileFields({
-    ...original
+    ...original,
+    name: name.trim()
   });
   if (!profile) {
     return;
