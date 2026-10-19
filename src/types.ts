@@ -34,6 +34,7 @@ export interface ExtensionSettings {
   maxUploadSizeMB: number;
   insertRules: InsertRule[];
   connectionCheck: ConnectionCheckMode;
+  promptForWorkspaceDefault: boolean;
 }
 
 export interface ProfileCredentials {

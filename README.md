@@ -96,6 +96,7 @@ oddly named files cannot break out of the emitted markup. Things to know:
 - `mdxAssetManager.allowedExtensions`: allowed upload extensions
 - `mdxAssetManager.maxUploadSizeMB`: maximum file size
 - `mdxAssetManager.connectionCheck`: credential validation mode (`write-probe`, default, or `read-only`)
+- `mdxAssetManager.promptForWorkspaceDefault`: ask to set a workspace default after an interactive profile pick (default on)
 - `mdxAssetManager.insertRules`: custom insertion templates
 
 ### Profile shape

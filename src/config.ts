@@ -38,8 +38,13 @@ export function getSettings(resource?: vscode.Uri): ExtensionSettings {
     maxUploadSizeMB: Math.max(1, config.get<number>("maxUploadSizeMB", 100)),
     insertRules: normalizeInsertRules(config.get<InsertRule[]>("insertRules", [])),
     // Unknown values coerce to the current default behavior.
-    connectionCheck: config.get<ConnectionCheckMode>("connectionCheck", "write-probe") === "read-only" ? "read-only" : "write-probe"
+    connectionCheck: config.get<ConnectionCheckMode>("connectionCheck", "write-probe") === "read-only" ? "read-only" : "write-probe",
+    promptForWorkspaceDefault: config.get<boolean>("promptForWorkspaceDefault", true) !== false
   };
+}
+
+export async function savePromptForWorkspaceDefault(enabled: boolean): Promise<void> {
+  await getConfig().update("promptForWorkspaceDefault", enabled, vscode.ConfigurationTarget.Global);
 }
 
 export async function saveProfiles(profiles: Profile[]): Promise<void> {
