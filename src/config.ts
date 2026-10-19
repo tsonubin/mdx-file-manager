@@ -30,13 +30,15 @@ export function getConfig(resource?: vscode.Uri): vscode.WorkspaceConfiguration 
 
 export function getSettings(resource?: vscode.Uri): ExtensionSettings {
   const config = getConfig(resource);
+  const rawMaxSizeMB = Number(config.get<unknown>("maxUploadSizeMB", 100));
   return {
-    profiles: normalizeProfiles(config.get<Profile[]>("profiles", [])),
+    profiles: normalizeProfiles(config.get<unknown>("profiles", [])),
     defaultProfile: config.get<string>("defaultProfile"),
     workspaceDefaultProfile: config.get<string>("workspaceDefaultProfile"),
-    allowedExtensions: normalizeExtensions(config.get<string[]>("allowedExtensions", DEFAULT_ALLOWED_EXTENSIONS)),
-    maxUploadSizeMB: Math.max(1, config.get<number>("maxUploadSizeMB", 100)),
-    insertRules: normalizeInsertRules(config.get<InsertRule[]>("insertRules", [])),
+    allowedExtensions: normalizeExtensions(config.get<unknown>("allowedExtensions", DEFAULT_ALLOWED_EXTENSIONS)),
+    // A malformed size must not disable the limit (NaN comparisons are false).
+    maxUploadSizeMB: Number.isFinite(rawMaxSizeMB) ? Math.max(1, rawMaxSizeMB) : 100,
+    insertRules: normalizeInsertRules(config.get<unknown>("insertRules", [])),
     // Unknown values coerce to the current default behavior.
     connectionCheck: config.get<ConnectionCheckMode>("connectionCheck", "write-probe") === "read-only" ? "read-only" : "write-probe",
     promptForWorkspaceDefault: config.get<boolean>("promptForWorkspaceDefault", true) !== false
@@ -88,15 +90,18 @@ export function validateProfile(profile: Profile): string[] {
   return errors;
 }
 
-function normalizeProfiles(profiles: Profile[]): Profile[] {
+function normalizeProfiles(raw: unknown): Profile[] {
+  const profiles = Array.isArray(raw) ? raw : [];
   const seen = new Set<string>();
   const normalized: Profile[] = [];
 
-  for (const profile of profiles) {
-    if (!profile || !profile.id) {
+  for (const entry of profiles) {
+    if (!entry || typeof entry !== "object") {
       continue;
     }
-    const id = profile.id.trim();
+    // Unvalidated settings JSON; every field is guarded below.
+    const profile = entry as Partial<Profile>;
+    const id = trimmedString(profile.id);
     if (!id || seen.has(id)) {
       continue;
     }
@@ -104,14 +109,14 @@ function normalizeProfiles(profiles: Profile[]): Profile[] {
     normalized.push({
       ...profile,
       id,
-      name: profile.name?.trim() || id,
+      name: trimmedString(profile.name) || id,
       provider: profile.provider,
-      bucket: profile.bucket?.trim() || "",
-      region: profile.region?.trim() || undefined,
-      endpoint: profile.endpoint?.trim() || undefined,
-      accountId: profile.accountId?.trim() || undefined,
-      publicBaseUrl: profile.publicBaseUrl?.trim() || "",
-      basePrefix: profile.basePrefix?.trim() || "assets",
+      bucket: trimmedString(profile.bucket),
+      region: trimmedString(profile.region) || undefined,
+      endpoint: trimmedString(profile.endpoint) || undefined,
+      accountId: trimmedString(profile.accountId) || undefined,
+      publicBaseUrl: trimmedString(profile.publicBaseUrl),
+      basePrefix: trimmedString(profile.basePrefix) || "assets",
       forcePathStyle: profile.forcePathStyle ?? false
     });
   }
@@ -119,20 +124,45 @@ function normalizeProfiles(profiles: Profile[]): Profile[] {
   return normalized;
 }
 
-function normalizeExtensions(exts: string[]): string[] {
-  const values = exts.length ? exts : DEFAULT_ALLOWED_EXTENSIONS;
-  return [...new Set(values.map((ext) => ensureLeadingDot(ext).toLowerCase()).filter(Boolean))];
+function normalizeExtensions(raw: unknown): string[] {
+  const values = strings(raw);
+  const effective = values.length ? values : DEFAULT_ALLOWED_EXTENSIONS;
+  return [...new Set(effective.map((ext) => ensureLeadingDot(ext).toLowerCase()).filter(Boolean))];
 }
 
-function normalizeInsertRules(rules: InsertRule[]): InsertRule[] {
-  return rules
-    .filter((rule) => rule?.template && rule?.when?.languageIds?.length)
-    .map((rule) => ({
+function normalizeInsertRules(raw: unknown): InsertRule[] {
+  const rules = Array.isArray(raw) ? raw : [];
+  const normalized: InsertRule[] = [];
+
+  for (const entry of rules) {
+    if (!entry || typeof entry !== "object") {
+      continue;
+    }
+    // Unvalidated settings JSON; every field is guarded below.
+    const rule = entry as InsertRule;
+    const languageIds = strings(rule.when?.languageIds).map((id) => id.trim().toLowerCase()).filter(Boolean);
+    if (typeof rule.template !== "string" || !languageIds.length) {
+      continue;
+    }
+    normalized.push({
       when: {
-        languageIds: rule.when.languageIds.map((id) => id.trim().toLowerCase()).filter(Boolean),
-        extensions: rule.when.extensions?.map((ext) => ensureLeadingDot(ext)).filter(Boolean),
-        mimePrefixes: rule.when.mimePrefixes?.map((value) => value.trim().toLowerCase()).filter(Boolean)
+        languageIds,
+        extensions: strings(rule.when?.extensions).map((ext) => ensureLeadingDot(ext)).filter(Boolean),
+        mimePrefixes: strings(rule.when?.mimePrefixes).map((value) => value.trim().toLowerCase()).filter(Boolean)
       },
       template: rule.template
-    }));
+    });
+  }
+
+  return normalized;
+}
+
+// Unvalidated settings arrays can hold non-strings; settings fields can hold
+// non-strings. Both normalizers rely on these for lockstep filtering.
+function strings(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function trimmedString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }
