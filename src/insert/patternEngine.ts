@@ -15,21 +15,21 @@ export function buildInsertSnippet(context: InsertContext, rules: InsertRule[]):
 
   if (context.languageId === "html") {
     if (isImage) {
-      return `<img src="${context.url}" alt="${context.alt}" />`;
+      return `<img src="${escapeHtml(context.url)}" alt="${escapeHtml(context.alt)}" />`;
     }
     if (isVideo) {
-      return `<video controls src="${context.url}"></video>`;
+      return `<video controls src="${escapeHtml(context.url)}"></video>`;
     }
-    return `<a href="${context.url}">${context.filename}</a>`;
+    return `<a href="${escapeHtml(context.url)}">${escapeHtml(context.filename)}</a>`;
   }
 
   if (isImage) {
-    return `![${context.alt}](${context.url})`;
+    return `![${escapeMarkdown(context.alt)}](${escapeMarkdownUrl(context.url)})`;
   }
   if (isVideo) {
-    return `<video controls src="${context.url}"></video>`;
+    return `<video controls src="${escapeHtml(context.url)}"></video>`;
   }
-  return `[${context.filename}](${context.url})`;
+  return `[${escapeMarkdown(context.filename)}](${escapeMarkdownUrl(context.url)})`;
 }
 
 export function createInsertContext(input: {
@@ -57,7 +57,39 @@ export function createInsertContext(input: {
 }
 
 export function renderTemplate(template: string, context: InsertContext): string {
-  return template.replace(/\$\{(url|filename|basename|ext|mime|key|alt)\}/g, (_value, token: keyof InsertContext) => context[token]);
+  return template.replace(/\$\{(url|filename|basename|ext|mime|key|alt)\}/g, (_value, token: keyof InsertContext) => {
+    const value = context[token];
+    if (context.languageId === "html") {
+      return escapeHtml(value);
+    }
+    return token === "url" || token === "key" ? escapeMarkdownUrl(value) : escapeMarkdown(value);
+  });
+}
+
+const HTML_ENTITIES: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;"
+};
+
+// Snippet values are attacker-controllable (filenames, user-configured
+// publicBaseUrl). Every interpolation is escaped for its sink so a crafted
+// value cannot break out of the generated markup or link. Entity escaping is
+// decoded by HTML, JSX and CommonMark, so it stays invisible in rendered
+// output; markdown structure chars additionally get backslashes, which
+// CommonMark renders away but HTML/JSX attribute sinks never see.
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => HTML_ENTITIES[char]);
+}
+
+function escapeMarkdown(value: string): string {
+  return escapeHtml(value).replace(/([\\[\]()])/g, "\\$1");
+}
+
+function escapeMarkdownUrl(value: string): string {
+  return escapeMarkdown(value).replace(/ /g, "%20");
 }
 
 function matchesRule(rule: InsertRule, context: InsertContext): boolean {

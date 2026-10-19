@@ -22,7 +22,9 @@ export function buildScopePrefix(scope: Pick<ActiveDocScope, "relativeDir" | "fi
 }
 
 export function buildObjectKey(prefix: string, filePath: string, suffix?: string): string {
-  const ext = path.extname(filePath).toLowerCase();
+  // Extension is the one filename part sanitizeSegment does not cover; strip
+  // anything URL-unsafe so keys can never smuggle markup into snippets.
+  const ext = path.extname(filePath).toLowerCase().replace(/[^a-z0-9.]+/g, "");
   const filenameBase = stripExtension(path.basename(filePath));
   const sanitizedBase = sanitizeSegment(filenameBase);
   const normalizedSuffix = suffix ? `-${sanitizeSegment(suffix)}` : "";

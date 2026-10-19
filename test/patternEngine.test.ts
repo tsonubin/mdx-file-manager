@@ -50,4 +50,30 @@ describe("patternEngine", () => {
 
     expect(renderTemplate("${filename}|${ext}|${alt}", context)).toBe("x.pdf|.pdf|x");
   });
+
+  it("neutralizes crafted filenames and urls in snippets", () => {
+    const htmlContext = createInsertContext({
+      languageId: "html",
+      filename: 'a" onerror="x.png',
+      extension: ".png",
+      url: 'https://cdn.example.com/a.png" bad="y',
+      key: "assets/a.png",
+      mime: "image/png"
+    });
+
+    expect(buildInsertSnippet(htmlContext, [])).toBe(
+      '<img src="https://cdn.example.com/a.png&quot; bad=&quot;y" alt="a&quot; onerror=&quot;x" />'
+    );
+
+    const mdContext = createInsertContext({
+      languageId: "markdown",
+      filename: "a](evil).png",
+      extension: ".png",
+      url: "https://cdn.example.com/a b.png",
+      key: "assets/a b.png",
+      mime: "image/png"
+    });
+
+    expect(buildInsertSnippet(mdContext, [])).toBe("![a\\]\\(evil\\)](https://cdn.example.com/a%20b.png)");
+  });
 });
