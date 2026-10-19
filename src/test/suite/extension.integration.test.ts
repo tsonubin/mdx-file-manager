@@ -6,10 +6,11 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { suite, test } from "mocha";
 import { AssetService } from "../../assetService";
+import { AssetTreeDataProvider } from "../../assets/treeDataProvider";
 import { ProfileResolver } from "../../profile/resolver";
 import { saveDefaultProfile, saveProfiles, saveWorkspaceDefaultProfile } from "../../config";
 import { SecretStore } from "../../secrets";
-import { Profile } from "../../types";
+import { AssetRecord, Profile } from "../../types";
 
 const EXTENSION_ID = "shay.mdx-asset-manager";
 
@@ -162,6 +163,35 @@ suite("Extension Host Integration", () => {
       server.close();
       await clearProfileConfig(document.uri);
     }
+  });
+
+  test("discards stale asset listings", async () => {
+    const pendingListings: Array<(assets: AssetRecord[]) => void> = [];
+    const assetService = {
+      listAssetsForActiveDocument: () => new Promise<AssetRecord[]>((resolve) => pendingListings.push(resolve))
+      // Stub implements only the listing method the provider calls.
+    } as unknown as AssetService;
+    const provider = new AssetTreeDataProvider(assetService);
+
+    // Stub editors: refresh only reads document.languageId/fileName.
+    const firstEditor = { document: { languageId: "markdown", fileName: "first.md" } } as vscode.TextEditor;
+    const secondEditor = { document: { languageId: "markdown", fileName: "second.md" } } as vscode.TextEditor;
+
+    const first = provider.refresh(firstEditor);
+    const second = provider.refresh(secondEditor);
+
+    pendingListings[1]([{ profileId: "p", profileName: "Stub", key: "fresh.png", url: "https://cdn.example.com/fresh.png" }]);
+    await second;
+    pendingListings[0]([
+      { profileId: "p", profileName: "Stub", key: "stale-a.png", url: "https://cdn.example.com/stale-a.png" },
+      { profileId: "p", profileName: "Stub", key: "stale-b.png", url: "https://cdn.example.com/stale-b.png" }
+    ]);
+    await first;
+
+    assert.equal(provider.getStatusMessage(), "Stub • 1 asset");
+    const items = provider.getChildren();
+    assert.ok(Array.isArray(items));
+    assert.equal(items[0].asset.key, "fresh.png");
   });
 });
 

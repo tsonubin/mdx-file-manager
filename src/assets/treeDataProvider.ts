@@ -24,6 +24,7 @@ export class AssetTreeDataProvider implements vscode.TreeDataProvider<AssetTreeI
 
   private assets: AssetRecord[] = [];
   private statusMessage = "Open an MDX/Markdown/HTML file to view assets.";
+  private refreshGeneration = 0;
 
   constructor(private readonly assetService: AssetService) {}
 
@@ -32,6 +33,8 @@ export class AssetTreeDataProvider implements vscode.TreeDataProvider<AssetTreeI
   }
 
   async refresh(editor = vscode.window.activeTextEditor): Promise<void> {
+    const generation = ++this.refreshGeneration;
+
     if (!editor || !isSupportedDocument(editor.document)) {
       this.assets = [];
       this.statusMessage = "Open an MDX/Markdown/HTML file to view scoped assets.";
@@ -40,12 +43,20 @@ export class AssetTreeDataProvider implements vscode.TreeDataProvider<AssetTreeI
     }
 
     try {
-      this.assets = await this.assetService.listAssetsForActiveDocument(editor);
-      const profileName = this.assets[0]?.profileName;
-      const countText = this.assets.length === 1 ? "1 asset" : `${this.assets.length} assets`;
+      const assets = await this.assetService.listAssetsForActiveDocument(editor);
+      if (generation !== this.refreshGeneration) {
+        return;
+      }
+      this.assets = assets;
+      const profileName = assets[0]?.profileName;
+      const countText = assets.length === 1 ? "1 asset" : `${assets.length} assets`;
       this.statusMessage = profileName ? `${profileName} • ${countText}` : countText;
     } catch (error) {
-      this.assets = [];
+      if (generation !== this.refreshGeneration) {
+        return;
+      }
+      // Keep the last known items; a transient listing failure should only
+      // change the status line, not blank the view.
       this.statusMessage = `Failed to load assets: ${toMessage(error)}`;
     }
 

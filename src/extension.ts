@@ -22,6 +22,16 @@ export function activate(context: vscode.ExtensionContext): void {
     treeView.message = treeProvider.getStatusMessage();
   };
 
+  // Editor switches can arrive in bursts; coalesce refreshes so a tab-flip
+  // through N docs costs one listing round trip, not N.
+  let refreshTimer: NodeJS.Timeout | undefined;
+  const scheduleTreeRefresh = (): void => {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => {
+      void treeProvider.refresh().then(refreshViewMessage);
+    }, 200);
+  };
+
   registerProfileCommands(context, { secretStore, profileResolver });
   registerAssetCommands(context, { assetService, treeProvider, onTreeRefreshed: refreshViewMessage });
 
@@ -40,16 +50,13 @@ export function activate(context: vscode.ExtensionContext): void {
       ],
       dropProvider
     ),
-    vscode.window.onDidChangeActiveTextEditor(async (editor) => {
-      await treeProvider.refresh(editor);
-      refreshViewMessage();
-    }),
-    vscode.workspace.onDidChangeConfiguration(async (event) => {
+    vscode.window.onDidChangeActiveTextEditor(scheduleTreeRefresh),
+    vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("mdxAssetManager")) {
-        await treeProvider.refresh();
-        refreshViewMessage();
+        scheduleTreeRefresh();
       }
-    })
+    }),
+    new vscode.Disposable(() => clearTimeout(refreshTimer))
   );
 
   void treeProvider.refresh().then(refreshViewMessage);
