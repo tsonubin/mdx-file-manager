@@ -58,6 +58,22 @@ oddly named files cannot break out of the emitted markup. Things to know:
   from a dedicated origin.
 - `Mdx Assets: Add Endpoint Profile` can run a connection check that writes
   and deletes a small `__mdx_asset_manager_probe__/` object in the bucket.
+  Set `mdxAssetManager.connectionCheck` to `read-only` to make the check
+  list-only (it then cannot verify upload permission).
+
+## Profile and settings scope
+
+- `Mdx Assets: Add/Edit/Remove Endpoint Profile` write
+  `mdxAssetManager.profiles` and `mdxAssetManager.defaultProfile` to **user
+  settings**.
+- `mdxAssetManager.workspaceDefaultProfile` is written to **workspace
+  settings** (`.vscode/settings.json`).
+- Settings merge (workspace values win), so a team can commit non-secret
+  profiles — bucket, endpoint, `publicBaseUrl`, `basePrefix` — in
+  `.vscode/settings.json` to share endpoint configuration through the repo.
+- Credentials are never in settings: they live in VS Code `SecretStorage`,
+  keyed by profile id and scoped to the machine/user. Each person runs
+  `Mdx Assets: Set Profile Credentials` once per profile.
 
 ## Troubleshooting
 
