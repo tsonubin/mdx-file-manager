@@ -36,7 +36,8 @@ export function registerAssetCommands(context: vscode.ExtensionContext, deps: {
         const { uploaded } = await vscode.window.withProgress(
           {
             location: vscode.ProgressLocation.Notification,
-            title: "Uploading assets"
+            title: "Uploading assets",
+            cancellable: true
           },
           (_progress, token) => assetService.uploadFiles({
             filePaths: picked.map((uri) => uri.fsPath),
