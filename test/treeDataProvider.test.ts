@@ -78,3 +78,21 @@ describe("AssetTreeDataProvider status", () => {
     await first;
   });
 });
+
+
+describe("AssetTreeDataProvider document changes", () => {
+  it("does not retain another document's assets when its listing fails", async () => {
+    const asset = { profileId: "prod", profileName: "Prod", key: "assets/first/image.png", url: "https://cdn.example.com/image.png" };
+    const list = vi.fn()
+      .mockResolvedValueOnce({ kind: "listed", profileName: "Prod", assets: [asset] })
+      .mockRejectedValueOnce(new Error("network unavailable"));
+    const provider = new AssetTreeDataProvider({ listAssetsForActiveDocument: list } as unknown as AssetService);
+    const first = { document: { languageId: "markdown", fileName: "first.md" } } as vscode.TextEditor;
+    const second = { document: { languageId: "markdown", fileName: "second.md" } } as vscode.TextEditor;
+    await provider.refresh(first);
+    expect(provider.getChildren()).toHaveLength(1);
+    await provider.refresh(second);
+    expect(provider.getChildren()).toEqual([]);
+    expect(provider.getStatusMessage()).toContain("network unavailable");
+  });
+});

@@ -74,8 +74,9 @@ export class AssetTreeDataProvider implements vscode.TreeDataProvider<AssetTreeI
       if (generation !== this.refreshGeneration || cancellation.signal.aborted) {
         return;
       }
-      // Keep the last known items; a transient listing failure should only
-      // change the status line, not blank the view.
+      // A failed refresh may target a different document or profile. Never
+      // leave stale, actionable assets under the new scope.
+      this.assets = [];
       this.statusMessage = `Failed to load assets: ${describeError(error)}`;
     } finally {
       if (generation === this.refreshGeneration && this.refreshCancellation === cancellation) {
