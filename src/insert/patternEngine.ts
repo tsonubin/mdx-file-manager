@@ -67,16 +67,41 @@ export function isTemplateToken(token: string): token is keyof InsertContext {
 }
 
 export function renderTemplate(template: string, context: InsertContext): string {
-  return template.replace(/\$\{([a-zA-Z]+)\}/g, (match, token: string) => {
+  return template.replace(/\$\{([a-zA-Z]+)\}/g, (match, token: string, offset: number) => {
     if (!isTemplateToken(token)) {
       return match;
     }
     const value = context[token];
-    if (context.languageId === "html") {
+    if (context.languageId === "html" || isQuotedAttribute(template, offset)) {
       return escapeHtml(value);
     }
     return token === "url" || token === "key" ? escapeMarkdownUrl(value) : escapeMarkdown(value);
   });
+}
+
+// Markdown/MDX rules can mix Markdown links with HTML/JSX tags. Determine
+// the sink from the original template, never from interpolated values.
+// In quoted attributes, backslashes are literal, not Markdown escapes.
+function isQuotedAttribute(template: string, offset: number): boolean {
+  let inTag = false;
+  let quote: string | undefined;
+  for (let i = 0; i < offset; i += 1) {
+    const char = template[i];
+    if (!inTag) {
+      if (char === "<" && /^\/?[a-zA-Z]/.test(template.slice(i + 1))) {
+        inTag = true;
+      }
+    } else if (quote) {
+      if (char === quote) {
+        quote = undefined;
+      }
+    } else if (char === '"' || char === "'") {
+      quote = char;
+    } else if (char === ">") {
+      inTag = false;
+    }
+  }
+  return inTag && quote !== undefined;
 }
 
 const HTML_ENTITIES: Record<string, string> = {

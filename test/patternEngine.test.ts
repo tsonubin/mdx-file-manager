@@ -92,3 +92,47 @@ describe("patternEngine", () => {
     expect(bare.basename).toBe("hero");
   });
 });
+
+
+describe("custom template interpolation sinks", () => {
+  const input = {
+    filename: 'clip](x)"\'&<>.mp4',
+    url: 'https://cdn.example.com/media(v2)/clip[1].mp4?a=1&b="x"',
+    key: "assets/clip.mp4",
+    mime: "video/mp4"
+  };
+
+  it.each(["markdown", "mdx", "html", "jsx", "tsx"])(
+    "preserves URL punctuation and escapes attribute delimiters in %s rules",
+    (languageId) => {
+      const context = createInsertContext({ ...input, languageId });
+      expect(buildInsertSnippet(context, [{
+        when: { languageIds: [languageId] },
+        template: '<video controls src="${url}" title=\'${filename}\'></video>'
+      }])).toBe(
+        '<video controls src="https://cdn.example.com/media(v2)/clip[1].mp4?a=1&amp;b=&quot;x&quot;" title=\'clip](x)&quot;&#39;&amp;&lt;&gt;.mp4\'></video>'
+      );
+    }
+  );
+
+  it("escapes each sink independently in a mixed MDX template", () => {
+    const context = createInsertContext({ ...input, languageId: "mdx" });
+    expect(renderTemplate('<Video title="a > b" src="${url}" /> [${filename}](${url})', context)).toBe(
+      '<Video title="a > b" src="https://cdn.example.com/media(v2)/clip[1].mp4?a=1&amp;b=&quot;x&quot;" /> [clip\\]\\(x\\)&quot;&#39;&amp;&lt;&gt;.mp4](https://cdn.example.com/media\\(v2\\)/clip\\[1\\].mp4?a=1&amp;b=&quot;x&quot;)'
+    );
+  });
+
+  it("does not let a substituted value change the next interpolation sink", () => {
+    const context = createInsertContext({ ...input, languageId: "mdx", filename: '\"><img src="' });
+    expect(renderTemplate('<Video title="${filename}" src="${url}" />', context)).toBe(
+      '<Video title="&quot;&gt;&lt;img src=&quot;" src="https://cdn.example.com/media(v2)/clip[1].mp4?a=1&amp;b=&quot;x&quot;" />'
+    );
+  });
+
+  it("retains Markdown escaping for custom links and literal backslashes in attributes", () => {
+    const context = createInsertContext({ ...input, languageId: "mdx", url: "https://cdn.example.com/a b(v2)\\c.mp4" });
+    expect(renderTemplate('[clip](${url}) <Video src="${url}" />', context)).toBe(
+      '[clip](https://cdn.example.com/a%20b\\(v2\\)\\\\c.mp4) <Video src="https://cdn.example.com/a b(v2)\\c.mp4" />'
+    );
+  });
+});
