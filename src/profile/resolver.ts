@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { getSettings, saveWorkspaceDefaultProfile } from "../config";
+import { getSettings, savePromptForWorkspaceDefault, saveWorkspaceDefaultProfile } from "../config";
 import { ResolvedProfile, Profile } from "../types";
 import { resolveProfileFromDefaults } from "./selection";
 
@@ -48,14 +48,17 @@ export class ProfileResolver {
       return undefined;
     }
 
-    if (askToSetWorkspaceDefault && resource) {
+    if (askToSetWorkspaceDefault && resource && settings.promptForWorkspaceDefault) {
       const choice = await vscode.window.showInformationMessage(
         `Use '${selected.name}' as workspace default profile?`,
         "Yes",
-        "No"
+        "No",
+        "Don't Ask Again"
       );
       if (choice === "Yes") {
         await saveWorkspaceDefaultProfile(selected.id, resource);
+      } else if (choice === "Don't Ask Again") {
+        await savePromptForWorkspaceDefault(false);
       }
     }
 

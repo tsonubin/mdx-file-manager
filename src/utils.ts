@@ -62,3 +62,22 @@ export function formatBytes(size?: number): string {
   }
   return `${(mb / 1024).toFixed(1)} GB`;
 }
+
+// Single shape for error text on every UI surface: the error name and HTTP
+// status lead (S3 failures otherwise arrive as bare messages), trivial "Error"
+// names are dropped, and empty messages say so instead of rendering blank.
+export function describeError(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+  const parts: string[] = [];
+  if (error.name && error.name !== "Error") {
+    parts.push(error.name);
+  }
+  const metadata: unknown = "$metadata" in error ? error.$metadata : undefined;
+  if (typeof metadata === "object" && metadata !== null && "httpStatusCode" in metadata && typeof metadata.httpStatusCode === "number") {
+    parts.push(`HTTP ${metadata.httpStatusCode}`);
+  }
+  parts.push(error.message || "no details");
+  return parts.join(" — ");
+}

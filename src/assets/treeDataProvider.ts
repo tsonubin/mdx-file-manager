@@ -2,7 +2,7 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { AssetService } from "../assetService";
 import { AssetRecord } from "../types";
-import { formatBytes, isSupportedDocument } from "../utils";
+import { describeError, formatBytes, isSupportedDocument } from "../utils";
 
 export class AssetTreeItem extends vscode.TreeItem {
   constructor(public readonly asset: AssetRecord) {
@@ -18,12 +18,14 @@ export class AssetTreeItem extends vscode.TreeItem {
   }
 }
 
-export class AssetTreeDataProvider implements vscode.TreeDataProvider<AssetTreeItem> {
+export class AssetTreeDataProvider implements vscode.TreeDataProvider<AssetTreeItem>, vscode.Disposable {
   private readonly onDidChangeTreeDataEmitter = new vscode.EventEmitter<AssetTreeItem | void>();
   readonly onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
 
   private assets: AssetRecord[] = [];
   private statusMessage = "Open an MDX/Markdown/HTML file to view assets.";
+  private refreshGeneration = 0;
+  private refreshCancellation?: AbortController;
 
   constructor(private readonly assetService: AssetService) {}
 
@@ -32,7 +34,13 @@ export class AssetTreeDataProvider implements vscode.TreeDataProvider<AssetTreeI
   }
 
   async refresh(editor = vscode.window.activeTextEditor): Promise<void> {
+    const generation = ++this.refreshGeneration;
+    this.refreshCancellation?.abort();
+    const cancellation = new AbortController();
+    this.refreshCancellation = cancellation;
+
     if (!editor || !isSupportedDocument(editor.document)) {
+      this.refreshCancellation = undefined;
       this.assets = [];
       this.statusMessage = "Open an MDX/Markdown/HTML file to view scoped assets.";
       this.onDidChangeTreeDataEmitter.fire();
@@ -40,13 +48,40 @@ export class AssetTreeDataProvider implements vscode.TreeDataProvider<AssetTreeI
     }
 
     try {
-      this.assets = await this.assetService.listAssetsForActiveDocument(editor);
-      const profileName = this.assets[0]?.profileName;
-      const countText = this.assets.length === 1 ? "1 asset" : `${this.assets.length} assets`;
-      this.statusMessage = profileName ? `${profileName} • ${countText}` : countText;
+      const listing = await this.assetService.listAssetsForActiveDocument(editor, cancellation.signal);
+      if (generation !== this.refreshGeneration) {
+        return;
+      }
+
+      if (!listing) {
+        this.assets = [];
+        this.statusMessage = "Open an MDX/Markdown/HTML file to view scoped assets.";
+      } else if (listing.kind === "listed") {
+        this.assets = listing.assets;
+        const countText = listing.assets.length === 1 ? "1 asset" : `${listing.assets.length} assets`;
+        this.statusMessage = `${listing.profileName} • ${countText}`;
+      } else {
+        this.assets = [];
+        if (listing.kind === "no-profiles") {
+          this.statusMessage = "No endpoint profiles configured. Run 'Mdx Assets: Add Endpoint Profile'.";
+        } else if (listing.kind === "no-default-profile") {
+          this.statusMessage = "No upload profile selected. Set a default or run 'Mdx Assets: Switch Active Profile'.";
+        } else {
+          this.statusMessage = `No credentials for '${listing.profileName}'. Run 'Mdx Assets: Set Profile Credentials'.`;
+        }
+      }
     } catch (error) {
+      if (generation !== this.refreshGeneration || cancellation.signal.aborted) {
+        return;
+      }
+      // A failed refresh may target a different document or profile. Never
+      // leave stale, actionable assets under the new scope.
       this.assets = [];
-      this.statusMessage = `Failed to load assets: ${toMessage(error)}`;
+      this.statusMessage = `Failed to load assets: ${describeError(error)}`;
+    } finally {
+      if (generation === this.refreshGeneration && this.refreshCancellation === cancellation) {
+        this.refreshCancellation = undefined;
+      }
     }
 
     this.onDidChangeTreeDataEmitter.fire();
@@ -59,11 +94,11 @@ export class AssetTreeDataProvider implements vscode.TreeDataProvider<AssetTreeI
   getChildren(): vscode.ProviderResult<AssetTreeItem[]> {
     return this.assets.map((asset) => new AssetTreeItem(asset));
   }
-}
 
-function toMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
+  dispose(): void {
+    this.refreshCancellation?.abort();
+    this.refreshCancellation = undefined;
+    this.onDidChangeTreeDataEmitter.dispose();
   }
-  return String(error);
+
 }

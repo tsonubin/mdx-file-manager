@@ -2,6 +2,8 @@ import type * as vscode from "vscode";
 
 export type ProviderType = "aws-s3" | "cloudflare-r2" | "custom-s3";
 
+export type ConnectionCheckMode = "write-probe" | "read-only";
+
 export interface Profile {
   id: string;
   name: string;
@@ -31,6 +33,8 @@ export interface ExtensionSettings {
   allowedExtensions: string[];
   maxUploadSizeMB: number;
   insertRules: InsertRule[];
+  connectionCheck: ConnectionCheckMode;
+  promptForWorkspaceDefault: boolean;
 }
 
 export interface ProfileCredentials {
@@ -49,7 +53,6 @@ export interface ActiveDocScope {
 
 export interface InsertContext {
   languageId: string;
-  extension: string;
   mime: string;
   url: string;
   filename: string;
@@ -68,10 +71,28 @@ export interface AssetRecord {
   lastModified?: Date;
 }
 
+// Why the asset view is empty — or the assets themselves. Bare "0 assets"
+// hid the real cause (no profile, no default, no credentials).
+export type AssetListing =
+  | { kind: "listed"; profileName: string; assets: AssetRecord[] }
+  | { kind: "no-profiles" }
+  | { kind: "no-default-profile" }
+  | { kind: "no-credentials"; profileName: string };
+
 export interface UploadResult {
   key: string;
   url: string;
   snippet: string;
+}
+
+export interface UploadFailure {
+  file: string;
+  reason: string;
+}
+
+export interface UploadBatchResult {
+  uploaded: UploadResult[];
+  failures: UploadFailure[];
 }
 
 export interface ResolvedProfile {

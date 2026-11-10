@@ -22,4 +22,9 @@ describe("keyBuilder", () => {
     const key = buildObjectKey("assets/posts/demo", "/tmp/My Image.PNG", "abc123");
     expect(key).toBe("assets/posts/demo/my-image-abc123.png");
   });
+
+  it("strips URL-unsafe characters from key extensions", () => {
+    const key = buildObjectKey("assets/posts/demo", "/tmp/photo.<img src=x>");
+    expect(key).toBe("assets/posts/demo/photo.imgsrcx");
+  });
 });

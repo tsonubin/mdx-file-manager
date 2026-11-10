@@ -128,8 +128,16 @@ async function editProfile(secretStore: SecretStore): Promise<void> {
     return;
   }
 
+  // The id stays fixed: SecretStorage credentials and saved defaults are
+  // keyed by it.
+  const name = await prompt("Profile name", original.name, (value) => (!value.trim() ? "Profile name is required." : undefined));
+  if (!name) {
+    return;
+  }
+
   const profile = await promptProfileFields({
-    ...original
+    ...original,
+    name: name.trim()
   });
   if (!profile) {
     return;
@@ -202,6 +210,9 @@ async function removeProfile(secretStore: SecretStore): Promise<void> {
 
   if (settings.defaultProfile === profile.id) {
     await saveDefaultProfile(undefined);
+  }
+  if (settings.workspaceDefaultProfile === profile.id) {
+    await saveWorkspaceDefaultProfile(undefined);
   }
 
   void vscode.window.showInformationMessage(`Profile '${profile.name}' removed.`);
@@ -419,7 +430,7 @@ async function promptProfileFields(base: Partial<Profile> & Pick<Profile, "id" |
 async function validateProfileConnection(profile: Profile, credentials: ProfileCredentials): Promise<boolean> {
   try {
     const uploader = new S3Uploader(profile, credentials);
-    await uploader.validateConnection();
+    await uploader.validateConnection({ readOnly: getSettings().connectionCheck === "read-only" });
     void vscode.window.showInformationMessage("Connection validation succeeded.");
     return true;
   } catch (error) {

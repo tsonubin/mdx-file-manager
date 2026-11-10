@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { AssetService } from "./assetService";
 import { AssetTreeDataProvider } from "./assets/treeDataProvider";
 import { registerAssetCommands } from "./commands";
+import { warnAboutSettingsProblems } from "./config";
 import { MdxDocumentDropProvider } from "./drop/documentDropProvider";
 import { registerProfileCommands } from "./profile/commands";
 import { ProfileResolver } from "./profile/resolver";
@@ -22,6 +23,16 @@ export function activate(context: vscode.ExtensionContext): void {
     treeView.message = treeProvider.getStatusMessage();
   };
 
+  // Editor switches can arrive in bursts; coalesce refreshes so a tab-flip
+  // through N docs costs one listing round trip, not N.
+  let refreshTimer: NodeJS.Timeout | undefined;
+  const scheduleTreeRefresh = (): void => {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => {
+      void treeProvider.refresh().then(refreshViewMessage);
+    }, 200);
+  };
+
   registerProfileCommands(context, { secretStore, profileResolver });
   registerAssetCommands(context, { assetService, treeProvider, onTreeRefreshed: refreshViewMessage });
 
@@ -32,6 +43,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     treeView,
+    treeProvider,
     vscode.languages.registerDocumentDropEditProvider(
       [
         { language: "markdown" },
@@ -40,18 +52,17 @@ export function activate(context: vscode.ExtensionContext): void {
       ],
       dropProvider
     ),
-    vscode.window.onDidChangeActiveTextEditor(async (editor) => {
-      await treeProvider.refresh(editor);
-      refreshViewMessage();
-    }),
-    vscode.workspace.onDidChangeConfiguration(async (event) => {
+    vscode.window.onDidChangeActiveTextEditor(scheduleTreeRefresh),
+    vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration("mdxAssetManager")) {
-        await treeProvider.refresh();
-        refreshViewMessage();
+        warnAboutSettingsProblems();
+        scheduleTreeRefresh();
       }
-    })
+    }),
+    new vscode.Disposable(() => clearTimeout(refreshTimer))
   );
 
+  warnAboutSettingsProblems();
   void treeProvider.refresh().then(refreshViewMessage);
 }
 

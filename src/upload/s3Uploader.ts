@@ -1,4 +1,5 @@
 import * as fs from "node:fs/promises";
+import { createReadStream } from "node:fs";
 import {
   DeleteObjectCommand,
   HeadObjectCommand,
@@ -20,55 +21,66 @@ export interface ListedObject {
 export class S3Uploader {
   private readonly client: S3Client;
 
-  constructor(private readonly profile: Profile, private readonly credentials?: ProfileCredentials) {
+  // Credentials are always explicit (SecretStorage); there is deliberately no
+  // ambient AWS chain fallback.
+  constructor(private readonly profile: Profile, private readonly credentials: ProfileCredentials) {
     this.client = new S3Client({
       region: resolveRegion(profile),
       endpoint: resolveEndpoint(profile),
       forcePathStyle: profile.forcePathStyle ?? profile.provider === "custom-s3",
-      credentials: credentials
-        ? {
-            accessKeyId: credentials.accessKeyId,
-            secretAccessKey: credentials.secretAccessKey
-          }
-        : undefined
+      credentials: {
+        accessKeyId: credentials.accessKeyId,
+        secretAccessKey: credentials.secretAccessKey
+      }
     });
   }
 
-  async uploadFile(localPath: string, key: string): Promise<string> {
-    const fileData = await fs.readFile(localPath);
+  async uploadFile(localPath: string, key: string, options?: { abortSignal?: AbortSignal }): Promise<string> {
     const contentType = mimeLookup(localPath) || "application/octet-stream";
+    // Stream the body: maxUploadSizeMB defaults to 100MB, so buffering the
+    // whole file would pin it in memory for the duration of the PUT.
+    const { size } = await fs.stat(localPath);
 
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.profile.bucket,
         Key: key,
-        Body: fileData,
-        ContentType: contentType,
-        ACL: undefined
-      })
+        Body: createReadStream(localPath),
+        ContentLength: size,
+        ContentType: contentType
+      }),
+      { abortSignal: options?.abortSignal }
     );
 
     return joinUrl(this.profile.publicBaseUrl, key);
   }
 
-  async keyExists(key: string): Promise<boolean> {
+  async keyExists(key: string, options?: { abortSignal?: AbortSignal }): Promise<boolean | "unknown"> {
     try {
       await this.client.send(
         new HeadObjectCommand({
           Bucket: this.profile.bucket,
           Key: key
-        })
+        }),
+        { abortSignal: options?.abortSignal }
       );
       return true;
     } catch (error) {
-      if (error instanceof S3ServiceException && (error.$metadata.httpStatusCode === 404 || error.name === "NotFound")) {
+      const status = error instanceof S3ServiceException ? error.$metadata.httpStatusCode : undefined;
+      const name = error instanceof S3ServiceException ? error.name : undefined;
+      if (status === 404 || name === "NotFound") {
         return false;
+      }
+      if (status === 403 || name === "AccessDenied" || name === "Forbidden") {
+        // Least-privilege keys without s3:ListBucket (and some MinIO setups)
+        // answer 403 for missing objects; uniqueness cannot be verified.
+        return "unknown";
       }
       throw error;
     }
   }
 
-  async listByPrefix(prefix: string): Promise<ListedObject[]> {
+  async listByPrefix(prefix: string, options?: { abortSignal?: AbortSignal }): Promise<ListedObject[]> {
     const all: ListedObject[] = [];
     let token: string | undefined;
     do {
@@ -77,7 +89,8 @@ export class S3Uploader {
           Bucket: this.profile.bucket,
           Prefix: prefix,
           ContinuationToken: token
-        })
+        }),
+        { abortSignal: options?.abortSignal }
       );
 
       for (const item of output.Contents ?? []) {
@@ -106,10 +119,7 @@ export class S3Uploader {
     );
   }
 
-  async validateConnection(): Promise<void> {
-    const probePrefix = "__mdx_asset_manager_probe__/";
-    const probeKey = `${probePrefix}${Date.now()}.txt`;
-
+  async validateConnection(options?: { readOnly?: boolean }): Promise<void> {
     await this.client.send(
       new ListObjectsV2Command({
         Bucket: this.profile.bucket,
@@ -117,6 +127,11 @@ export class S3Uploader {
       })
     );
 
+    if (options?.readOnly) {
+      return;
+    }
+
+    const probeKey = `__mdx_asset_manager_probe__/${Date.now()}.txt`;
     await this.client.send(
       new PutObjectCommand({
         Bucket: this.profile.bucket,

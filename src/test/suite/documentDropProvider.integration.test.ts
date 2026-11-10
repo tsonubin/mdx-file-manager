@@ -4,7 +4,8 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { suite, test } from "mocha";
 import { MdxDocumentDropProvider } from "../../drop/documentDropProvider";
-import type { UploadResult } from "../../types";
+import type { AssetService } from "../../assetService";
+import type { UploadBatchResult, UploadResult } from "../../types";
 
 suite("Document Drop Provider", () => {
   test("builds a drop edit from text/uri-list payload", async () => {
@@ -16,17 +17,19 @@ suite("Document Drop Provider", () => {
       {
         key: "assets/content/post/sample-image.png",
         url: "https://cdn.example.com/assets/content/post/sample-image.png",
-        snippet: "![sample image](https://cdn.example.com/assets/content/post/sample-image.png)"
+        // $1 is snippet syntax; it must land in the document literally.
+        snippet: "![sample image](https://cdn.example.com/assets/content/post/sample-image$1.png)"
       }
     ];
 
     const provider = new MdxDocumentDropProvider({
-      async uploadFiles(options: { filePaths: string[]; targetDocument: vscode.TextDocument }): Promise<UploadResult[]> {
+      async uploadFiles(options: { filePaths: string[]; targetDocument: vscode.TextDocument }): Promise<UploadBatchResult> {
         captured.filePaths = options.filePaths;
         captured.document = options.targetDocument;
-        return mockResult;
+        return { uploaded: mockResult, failures: [] };
       }
-    } as any);
+      // Stub implements only the uploadFiles method the provider calls.
+    } as unknown as AssetService);
 
     const dataTransfer = new vscode.DataTransfer();
     dataTransfer.set("text/uri-list", new vscode.DataTransferItem(vscode.Uri.file(droppedFile).toString()));
@@ -41,16 +44,16 @@ suite("Document Drop Provider", () => {
     assert.ok(edit, "Expected a document drop edit");
     assert.deepEqual(captured.filePaths, [droppedFile]);
     assert.equal(captured.document, document);
-    assert.ok(edit?.insertText instanceof vscode.SnippetString);
-    assert.equal((edit?.insertText as vscode.SnippetString).value, mockResult[0].snippet);
+    assert.equal(edit?.insertText, mockResult[0].snippet);
   });
 
   test("returns undefined when no file payload exists", async () => {
     const provider = new MdxDocumentDropProvider({
-      async uploadFiles(): Promise<UploadResult[]> {
+      async uploadFiles(): Promise<UploadBatchResult> {
         throw new Error("Should not be called");
       }
-    } as any);
+      // Stub implements only the uploadFiles method the provider calls.
+    } as unknown as AssetService);
 
     const document = await vscode.workspace.openTextDocument({ language: "markdown", content: "" });
     const emptyDataTransfer = new vscode.DataTransfer();
